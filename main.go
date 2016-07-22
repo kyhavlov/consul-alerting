@@ -40,7 +40,7 @@ func main() {
 		panic(err)
 	}
 
-	makeTestServices(client)
+	registerTestServices(client)
 
 	// Get services to watch
 	services, _, err := client.Catalog().Services(&api.QueryOptions{})
@@ -86,10 +86,12 @@ func main() {
 
 func shutdown(client *api.Client) {
 	log.Info("Got interrupt signal, shutting down")
+	client.Agent().ServiceDeregister("redis")
+	client.Agent().ServiceDeregister("nginx")
 	os.Exit(0)
 }
 
-func makeTestServices(client *api.Client) {
+func registerTestServices(client *api.Client) {
 	// Register ourselves as a service
 	client.Agent().ServiceRegister(&api.AgentServiceRegistration{
 		Name: "redis",
