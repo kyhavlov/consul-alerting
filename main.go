@@ -40,23 +40,33 @@ func main() {
 		panic(err)
 	}
 
-	registerTestServices(client)
+	if config.DevMode {
+		registerTestServices(client)
+	}
 
 	// Get services to watch
 	services, _, err := client.Catalog().Services(&api.QueryOptions{})
 
-	// Initialize watches
+	// Initialize service watches
 	for service, tags := range services {
 		serviceConfig := config.getServiceConfig(service)
 
 		// Watch each tag separately if the flag is set
 		if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
 			for _, tag := range tags {
-				go watch(service, tag, client)
+				go WatchService(service, tag, client)
 			}
 		} else {
-			go watch(service, "", client)
+			go WatchService(service, "", client)
 		}
+	}
+
+	// Initialize node watches
+	node, err := client.Agent().NodeName()
+	if err != nil {
+		log.Errorf("Error getting consul node name: %s", err)
+	} else {
+		go WatchNode(node, client)
 	}
 
 	c := make(chan os.Signal, 1)
@@ -70,13 +80,13 @@ func main() {
 			// TODO: reload config
 
 		case syscall.SIGINT:
-			shutdown(client)
+			shutdown(client, config)
 
 		case syscall.SIGTERM:
-			shutdown(client)
+			shutdown(client, config)
 
 		case syscall.SIGQUIT:
-			shutdown(client)
+			shutdown(client, config)
 
 		default:
 			log.Error("Unknown signal.")
@@ -84,15 +94,25 @@ func main() {
 	}
 }
 
-func shutdown(client *api.Client) {
+func shutdown(client *api.Client, config *Config) {
 	log.Info("Got interrupt signal, shutting down")
-	client.Agent().ServiceDeregister("redis")
-	client.Agent().ServiceDeregister("nginx")
+	if config.DevMode {
+		client.Agent().CheckDeregister("memory-usage")
+		client.Agent().ServiceDeregister("redis")
+		client.Agent().ServiceDeregister("nginx")
+	}
 	os.Exit(0)
 }
 
 func registerTestServices(client *api.Client) {
-	// Register ourselves as a service
+	client.Agent().CheckRegister(&api.AgentCheckRegistration{
+		Name: "memory-usage",
+		AgentServiceCheck: api.AgentServiceCheck{
+			Script:   "exit $(shuf -i 0-2 -n 1)",
+			Interval: "10s",
+		},
+	})
+
 	client.Agent().ServiceRegister(&api.AgentServiceRegistration{
 		Name: "redis",
 		Tags: []string{"alpha", "beta"},

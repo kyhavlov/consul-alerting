@@ -6,6 +6,7 @@ import (
 
 type Config struct {
 	ConsulAddress string          `hcl:"consul_address"`
+	DevMode       bool            `hcl:"dev_mode"`
 	Services      []ServiceConfig `hcl:"service"`
 }
 

@@ -1,4 +1,5 @@
-consul_address = "localhost:8500"
+consul_address = "linux-server:8500"
+dev_mode = true
 
 service "redis" {
   change_threshold = 10
