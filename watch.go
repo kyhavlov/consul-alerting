@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/consul/api"
 	"time"
 	"fmt"
+	"encoding/json"
 )
 
 // Watches a service for changes in health
@@ -49,10 +50,10 @@ func WatchService(service string, tag string, client *api.Client) {
 					}
 
 					if nodeService, ok := node.Services[service]; ok && contains(nodeService.Tags, tag) {
-						ProcessUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check})
+						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, client)
 					}
 				} else {
-					ProcessUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check})
+					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, client)
 				}
 			}
 			lastCheckStatus[check.CheckID] = check.Status
@@ -89,7 +90,7 @@ func WatchNode(node string, client *api.Client) {
 			if check.ServiceID == "" {
 				// Determine whether the check changed status
 				if oldStatus, ok := lastCheckStatus[check.CheckID]; ok && oldStatus != check.Status {
-					ProcessUpdate(CheckUpdate{HealthCheck: check})
+					processUpdate(CheckUpdate{HealthCheck: check}, client)
 				}
 				lastCheckStatus[check.CheckID] = check.Status
 			}
@@ -97,21 +98,55 @@ func WatchNode(node string, client *api.Client) {
 	}
 }
 
-func ProcessUpdate(update CheckUpdate) {
+type CheckUpdate struct {
+	ServiceTag string
+	*api.HealthCheck
+}
+
+type AlertState struct {
+	Status      string `json:"status"`
+	LastUpdated int64  `json:"last_updated"`
+}
+
+// processUpdate updates the state of an alert stored in the Consul key-value store
+// based on the given CheckUpdate
+func processUpdate(update CheckUpdate, client *api.Client) {
 	check := update.HealthCheck
+
+	kvPath := "service/consul-alerting"
 
 	if check.ServiceID != "" {
 		log.Infof("Check '%s' in service '%s'%s on node %s is now %s",
 			check.CheckID, check.ServiceID, update.ServiceTag, check.Node, check.Status)
+
+		tagPath := ""
+		if update.ServiceTag != "" {
+			tagPath = fmt.Sprintf("%s/", update.ServiceTag)
+		}
+
+		kvPath = kvPath + fmt.Sprintf("/service/%s/%s%s", check.ServiceID, tagPath, check.CheckID)
 	} else {
 		log.Infof("Check '%s' on node %s is now %s",
 			check.CheckID, check.Node, check.Status)
+		kvPath = kvPath + fmt.Sprintf("/node/%s/%s", check.Node, check.CheckID)
 	}
-}
 
-type CheckUpdate struct {
-	ServiceTag string
-	*api.HealthCheck
+	status, err := json.Marshal(AlertState{
+		Status: check.Status,
+		LastUpdated: time.Now().Unix(),
+	})
+	if err != nil {
+		log.Errorf("Error forming state for alert in Consul: %s", err)
+	}
+
+	_, err = client.KV().Put(&api.KVPair{
+		Key: kvPath,
+		Value: status,
+	}, nil)
+
+	if err != nil {
+		log.Errorf("Error storing state for alert in Consul: %s", err)
+	}
 }
 
 func contains(s []string, e string) bool {

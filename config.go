@@ -5,9 +5,10 @@ import (
 )
 
 type Config struct {
-	ConsulAddress string          `hcl:"consul_address"`
-	DevMode       bool            `hcl:"dev_mode"`
-	Services      []ServiceConfig `hcl:"service"`
+	ConsulAddress   string          `hcl:"consul_address"`
+	DevMode         bool            `hcl:"dev_mode"`
+	ChangeThreshold int             `hcl:"change_threshold"`
+	Services        []ServiceConfig `hcl:"service"`
 }
 
 type ServiceConfig struct {
@@ -23,10 +24,14 @@ func parse(config string) (*Config, error) {
 		return nil, err
 	}
 
+	if result.ChangeThreshold == 0 {
+		result.ChangeThreshold = 60
+	}
+
 	// Set default service config
 	for _, service := range result.Services {
 		if service.ChangeThreshold == 0 {
-			service.ChangeThreshold = 60
+			service.ChangeThreshold = result.ChangeThreshold
 		}
 	}
 

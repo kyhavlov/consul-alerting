@@ -97,7 +97,7 @@ func main() {
 func shutdown(client *api.Client, config *Config) {
 	log.Info("Got interrupt signal, shutting down")
 	if config.DevMode {
-		client.Agent().CheckDeregister("memory-usage")
+		client.Agent().CheckDeregister("memory usage")
 		client.Agent().ServiceDeregister("redis")
 		client.Agent().ServiceDeregister("nginx")
 	}
@@ -106,7 +106,7 @@ func shutdown(client *api.Client, config *Config) {
 
 func registerTestServices(client *api.Client) {
 	client.Agent().CheckRegister(&api.AgentCheckRegistration{
-		Name: "memory-usage",
+		Name: "memory usage",
 		AgentServiceCheck: api.AgentServiceCheck{
 			Script:   "exit $(shuf -i 0-2 -n 1)",
 			Interval: "10s",
