@@ -68,8 +68,10 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 				} else {
 					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client)
 				}
+				lastCheckStatus[check.Node+"/"+check.CheckID] = check.Status
+			} else {
+				lastCheckStatus[check.Node+"/"+check.CheckID] = api.HealthPassing
 			}
-			lastCheckStatus[check.Node+"/"+check.CheckID] = check.Status
 		}
 	}
 }

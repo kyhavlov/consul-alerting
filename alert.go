@@ -16,6 +16,7 @@ type AlertState struct {
 	Message     string `json:"message"`
 }
 
+// Returns a map of nodename/checkname strings to AlertStates from the given KV prefix
 func getAlertStates(kvPath string, client *api.Client) (map[string]*AlertState, error) {
 	alertStates := make(map[string]*AlertState)
 	keys, _, err := client.KV().Keys(kvPath, "", nil)
