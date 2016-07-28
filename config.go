@@ -12,9 +12,10 @@ type Config struct {
 }
 
 type ServiceConfig struct {
-	Name            string `hcl:",key"`
-	ChangeThreshold int    `hcl:"change_threshold"`
-	DistinctTags    bool   `hcl:"distinct_tags"`
+	Name            string   `hcl:",key"`
+	ChangeThreshold int      `hcl:"change_threshold"`
+	DistinctTags    bool     `hcl:"distinct_tags"`
+	IgnoredTags     []string `hcl:"ignored_tags"`
 }
 
 func parse(config string) (*Config, error) {

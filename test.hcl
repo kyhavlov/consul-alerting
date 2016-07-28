@@ -8,5 +8,14 @@ service "redis" {
 }
 
 service "nginx" {
-  change_threshold = 10
+  change_threshold = 5
+}
+
+service "elasticsearch" {
+  distinct_tags = true
+  ignored_tags = ["seed", "node"]
+}
+
+service "influx" {
+  distinct_tags = true
 }

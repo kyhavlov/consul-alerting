@@ -54,10 +54,12 @@ func main() {
 		// Watch each tag separately if the flag is set
 		if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
 			for _, tag := range tags {
-				go WatchService(service, tag, client)
+				if !contains(serviceConfig.IgnoredTags, tag) {
+					go WatchService(service, tag, serviceConfig.ChangeThreshold, client)
+				}
 			}
 		} else {
-			go WatchService(service, "", client)
+			go WatchService(service, "", config.ChangeThreshold, client)
 		}
 	}
 
@@ -66,7 +68,7 @@ func main() {
 	if err != nil {
 		log.Errorf("Error getting consul node name: %s", err)
 	} else {
-		go WatchNode(node, client)
+		go WatchNode(node, config.ChangeThreshold, client)
 	}
 
 	c := make(chan os.Signal, 1)
@@ -109,7 +111,7 @@ func registerTestServices(client *api.Client) {
 		Name: "memory usage",
 		AgentServiceCheck: api.AgentServiceCheck{
 			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "10s",
+			Interval: "20s",
 		},
 	})
 
@@ -129,7 +131,7 @@ func registerTestServices(client *api.Client) {
 		Port: 3000,
 		Check: &api.AgentServiceCheck{
 			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "6s",
+			Interval: "8s",
 		},
 	})
 }
