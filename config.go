@@ -1,14 +1,17 @@
 package main
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/hcl"
 )
 
 type Config struct {
 	ConsulAddress   string          `hcl:"consul_address"`
 	DevMode         bool            `hcl:"dev_mode"`
+	LocalMode       bool            `hcl:"local_mode"`
 	ChangeThreshold int             `hcl:"change_threshold"`
 	Services        []ServiceConfig `hcl:"service"`
+	Handlers        HandlerConfig   `hcl:"handlers"`
 }
 
 type ServiceConfig struct {
@@ -18,25 +21,43 @@ type ServiceConfig struct {
 	IgnoredTags     []string `hcl:"ignored_tags"`
 }
 
-func parse(config string) (*Config, error) {
-	result := &Config{}
+type HandlerConfig struct {
+	StdoutHandler `hcl:"stdout"`
+	EmailHandler  `hcl:"email"`
+}
 
-	if err := hcl.Decode(&result, config); err != nil {
-		return nil, err
+func parse(raw string) (*Config, []AlertHandler, error) {
+	config := &Config{}
+
+	if err := hcl.Decode(&config, raw); err != nil {
+		return nil, nil, err
 	}
 
-	if result.ChangeThreshold == 0 {
-		result.ChangeThreshold = 60
+	// Set default global config
+	if config.ChangeThreshold == 0 {
+		config.ChangeThreshold = 60
 	}
 
 	// Set default service config
-	for _, service := range result.Services {
+	for _, service := range config.Services {
 		if service.ChangeThreshold == 0 {
-			service.ChangeThreshold = result.ChangeThreshold
+			service.ChangeThreshold = config.ChangeThreshold
 		}
 	}
 
-	return result, nil
+	handlers := make([]AlertHandler, 0)
+
+	if config.Handlers.StdoutHandler.Enabled {
+		handlers = append(handlers, config.Handlers.StdoutHandler)
+		log.Info("Handler 'stdout' enabled")
+	}
+
+	if config.Handlers.EmailHandler.Enabled {
+		handlers = append(handlers, config.Handlers.EmailHandler)
+		log.Info("Handler 'email' enabled")
+	}
+
+	return config, handlers, nil
 }
 
 func (config *Config) getServiceConfig(name string) *ServiceConfig {

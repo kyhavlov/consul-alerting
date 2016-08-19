@@ -1,4 +1,4 @@
-consul_address = "linux-server:8500"
+consul_address = "localhost:8500"
 dev_mode = true
 change_threshold = 30
 
@@ -18,4 +18,16 @@ service "elasticsearch" {
 
 service "influx" {
   distinct_tags = true
+}
+
+handlers {
+  stdout {
+    enabled = true
+    log_level = "INFO"
+  }
+
+  email {
+    enabled = true
+    recipients = ["kyhavlov@example.com"]
+  }
 }

@@ -26,7 +26,7 @@ func main() {
 	}
 
 	// Parse config
-	config, err := parse(string(dat))
+	config, handlers, err := parse(string(dat))
 	if err != nil {
 		log.Errorf("Error parsing config file: %v", err)
 	}
@@ -55,20 +55,30 @@ func main() {
 		if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
 			for _, tag := range tags {
 				if !contains(serviceConfig.IgnoredTags, tag) {
-					go WatchService(service, tag, serviceConfig.ChangeThreshold, client)
+					go WatchService(service, tag, serviceConfig.ChangeThreshold, client, handlers)
 				}
 			}
 		} else {
-			go WatchService(service, "", config.ChangeThreshold, client)
+			go WatchService(service, "", config.ChangeThreshold, client, handlers)
 		}
 	}
 
 	// Initialize node watches
-	node, err := client.Agent().NodeName()
-	if err != nil {
-		log.Errorf("Error getting consul node name: %s", err)
+	if config.LocalMode {
+		node, err := client.Agent().NodeName()
+		if err != nil {
+			log.Errorf("Error getting consul node name: %s", err)
+		} else {
+			go WatchNode(node, config.ChangeThreshold, client, handlers)
+		}
 	} else {
-		go WatchNode(node, config.ChangeThreshold, client)
+		nodes, _, err := client.Catalog().Nodes(&api.QueryOptions{})
+		if err != nil {
+			log.Errorf("Error getting nodes from catalog: %s", err)
+		}
+		for _, node := range nodes {
+			go WatchNode(node.Node, config.ChangeThreshold, client, handlers)
+		}
 	}
 
 	c := make(chan os.Signal, 1)

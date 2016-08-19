@@ -3,15 +3,16 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/consul/api"
-	"time"
 )
 
 const watchWaitTime = 5 * time.Minute
 
 // Watches a service for changes in health
-func WatchService(service string, tag string, changeThreshold int, client *api.Client) {
+func WatchService(service string, tag string, changeThreshold int, client *api.Client, handlers []AlertHandler) {
 	// Set wait time to make the consul query block until an update happens
 	queryOpts := &api.QueryOptions{
 		WaitTime: watchWaitTime,
@@ -63,10 +64,10 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 					}
 
 					if nodeService, ok := node.Services[service]; ok && contains(nodeService.Tags, tag) {
-						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client)
+						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client, handlers)
 					}
 				} else {
-					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client)
+					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client, handlers)
 				}
 				lastCheckStatus[check.Node+"/"+check.CheckID] = check.Status
 			} else {
@@ -77,7 +78,7 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 }
 
 // Watches a node for changes in health
-func WatchNode(node string, changeThreshold int, client *api.Client) {
+func WatchNode(node string, changeThreshold int, client *api.Client, handlers []AlertHandler) {
 	// Set the options for the watch query
 	queryOpts := &api.QueryOptions{
 		WaitTime: watchWaitTime,
@@ -114,7 +115,7 @@ func WatchNode(node string, changeThreshold int, client *api.Client) {
 			if check.ServiceID == "" {
 				// Determine whether the check changed status
 				if oldStatus, ok := lastCheckStatus[node+"/"+check.CheckID]; ok && oldStatus != check.Status {
-					processUpdate(CheckUpdate{HealthCheck: check}, changeThreshold, client)
+					processUpdate(CheckUpdate{HealthCheck: check}, changeThreshold, client, handlers)
 				}
 				lastCheckStatus[node+"/"+check.CheckID] = check.Status
 			}
@@ -129,7 +130,7 @@ type CheckUpdate struct {
 
 // processUpdate updates the state of an alert stored in the Consul key-value store
 // based on the given CheckUpdate
-func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client) {
+func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client, handlers []AlertHandler) {
 	check := update.HealthCheck
 
 	kvPath := "service/consul-alerting"
@@ -154,6 +155,9 @@ func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client) 
 
 	status, err := json.Marshal(AlertState{
 		Status:      check.Status,
+		Node:        check.Node,
+		Service:     check.ServiceName,
+		Tag:         update.ServiceTag,
 		LastUpdated: time.Now().Unix(),
 		Message:     message,
 	})
@@ -170,7 +174,7 @@ func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client) 
 		log.Errorf("Error storing state for alert in Consul: %s", err)
 	}
 
-	go attemptAlert(int64(changeThreshold), kvPath, client)
+	go attemptAlert(int64(changeThreshold), kvPath, client, handlers)
 }
 
 func contains(s []string, e string) bool {
