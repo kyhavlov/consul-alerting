@@ -6,12 +6,15 @@ import (
 )
 
 type Config struct {
-	ConsulAddress   string          `hcl:"consul_address"`
-	DevMode         bool            `hcl:"dev_mode"`
-	LocalMode       bool            `hcl:"local_mode"`
-	ChangeThreshold int             `hcl:"change_threshold"`
-	Services        []ServiceConfig `hcl:"service"`
-	Handlers        HandlerConfig   `hcl:"handlers"`
+	ConsulAddress   string `hcl:"consul_address"`
+	DevMode         bool   `hcl:"dev_mode"`
+	GlobalMode      bool   `hcl:"global_mode"`
+	ChangeThreshold int    `hcl:"change_threshold"`
+
+	LogLevel string `hcl:"log_level"`
+
+	Services []ServiceConfig `hcl:"service"`
+	Handlers HandlerConfig   `hcl:"handlers"`
 }
 
 type ServiceConfig struct {
@@ -34,8 +37,16 @@ func parse(raw string) (*Config, []AlertHandler, error) {
 	}
 
 	// Set default global config
+	if config.ConsulAddress == "" {
+		config.ConsulAddress = "localhost:8500"
+	}
+
 	if config.ChangeThreshold == 0 {
 		config.ChangeThreshold = 60
+	}
+
+	if config.LogLevel == "" {
+		config.LogLevel = "INFO"
 	}
 
 	// Set default service config

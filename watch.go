@@ -9,11 +9,20 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-const watchWaitTime = 5 * time.Minute
+const watchWaitTime = 15 * time.Second
+const errorWaitTime = 10 * time.Second
+
+type WatchOptions struct {
+	changeThreshold int
+	client          *api.Client
+	handlers        []AlertHandler
+	stopCh          chan struct{}
+}
 
 // Watches a service for changes in health
-func WatchService(service string, tag string, changeThreshold int, client *api.Client, handlers []AlertHandler) {
+func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	// Set wait time to make the consul query block until an update happens
+	client := watchOpts.client
 	queryOpts := &api.QueryOptions{
 		WaitTime: watchWaitTime,
 	}
@@ -25,8 +34,11 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 		tagDisplay = fmt.Sprintf(" (tag: %s)", tag)
 	}
 
+	keyPath := "service/consul-alerting/service/" + service + "/" + tagPath
+
+	// Load previous alert states for this service from consul
 	lastCheckStatus := make(map[string]string)
-	storedAlertStates, err := getAlertStates("service/consul-alerting/service/"+service+"/"+tagPath, client)
+	storedAlertStates, err := getAlertStates(keyPath, client)
 
 	if err != nil {
 		log.Error("Error loading previous alert states from consul: ", err)
@@ -36,21 +48,51 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 		lastCheckStatus[checkName] = alertState.Status
 	}
 
-	log.Infof("Starting watch for service: %s%s", service, tagDisplay)
+	// Set up the lock this thread will use to determine leader status
+	lockPath := keyPath + "leader"
+	apiLock, err := client.LockKey(lockPath)
+
+	if err != nil {
+		log.Fatalf("Error initializing lock for service %s%s", service, tagDisplay, err)
+	}
+
+	lock := LockHelper{
+		target: service + tagDisplay,
+		path:   lockPath,
+		client: client,
+		lock:   apiLock,
+		stopCh: make(chan struct{}, 1),
+		lockCh: make(chan struct{}, 1),
+	}
+	go lock.start()
+
+	log.Debugf("Initialized watch for service: %s%s", service, tagDisplay)
 
 	for {
+		select {
+		case <-watchOpts.stopCh:
+			log.Infof("Shutting down watch for service %s%s", service, tagDisplay)
+			lock.stop()
+			<-watchOpts.stopCh
+			break
+		default:
+		}
+
+		if !lock.acquired {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
 		// Do a blocking query (a consul watch) for the health of the service
 		checks, queryMeta, err := client.Health().Checks(service, queryOpts)
 
 		if err != nil {
 			log.Errorf("Error trying to watch service: %s, retrying in 10s...", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(errorWaitTime)
 			continue
 		}
 
 		queryOpts.WaitIndex = queryMeta.LastIndex
-
-		//log.Debugf("Got watch return for service %s", service)
 
 		for _, check := range checks {
 			// Determine whether the check changed status
@@ -64,10 +106,10 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 					}
 
 					if nodeService, ok := node.Services[service]; ok && contains(nodeService.Tags, tag) {
-						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client, handlers)
+						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, watchOpts)
 					}
 				} else {
-					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, changeThreshold, client, handlers)
+					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, watchOpts)
 				}
 				lastCheckStatus[check.Node+"/"+check.CheckID] = check.Status
 			} else {
@@ -78,11 +120,13 @@ func WatchService(service string, tag string, changeThreshold int, client *api.C
 }
 
 // Watches a node for changes in health
-func WatchNode(node string, changeThreshold int, client *api.Client, handlers []AlertHandler) {
+func WatchNode(node string, watchOpts *WatchOptions) {
 	// Set the options for the watch query
 	queryOpts := &api.QueryOptions{
 		WaitTime: watchWaitTime,
 	}
+
+	client := watchOpts.client
 
 	lastCheckStatus := make(map[string]string)
 	storedAlertStates, err := getAlertStates("service/consul-alerting/node/"+node+"/", client)
@@ -95,7 +139,7 @@ func WatchNode(node string, changeThreshold int, client *api.Client, handlers []
 		lastCheckStatus[checkName] = alertState.Status
 	}
 
-	log.Infof("Starting watch for node: %s", node)
+	log.Debugf("Initialized watch for node: %s", node)
 
 	for {
 		// Do a blocking query (a consul watch) for the health of the node
@@ -103,7 +147,7 @@ func WatchNode(node string, changeThreshold int, client *api.Client, handlers []
 
 		if err != nil {
 			log.Errorf("Error trying to watch node: %s, retrying in 10s...", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(errorWaitTime)
 			continue
 		}
 
@@ -115,7 +159,7 @@ func WatchNode(node string, changeThreshold int, client *api.Client, handlers []
 			if check.ServiceID == "" {
 				// Determine whether the check changed status
 				if oldStatus, ok := lastCheckStatus[node+"/"+check.CheckID]; ok && oldStatus != check.Status {
-					processUpdate(CheckUpdate{HealthCheck: check}, changeThreshold, client, handlers)
+					processUpdate(CheckUpdate{HealthCheck: check}, watchOpts)
 				}
 				lastCheckStatus[node+"/"+check.CheckID] = check.Status
 			}
@@ -130,7 +174,7 @@ type CheckUpdate struct {
 
 // processUpdate updates the state of an alert stored in the Consul key-value store
 // based on the given CheckUpdate
-func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client, handlers []AlertHandler) {
+func processUpdate(update CheckUpdate, watchOpts *WatchOptions) {
 	check := update.HealthCheck
 
 	kvPath := "service/consul-alerting"
@@ -165,7 +209,7 @@ func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client, 
 		log.Errorf("Error forming state for alert in Consul: %s", err)
 	}
 
-	_, err = client.KV().Put(&api.KVPair{
+	_, err = watchOpts.client.KV().Put(&api.KVPair{
 		Key:   kvPath,
 		Value: status,
 	}, nil)
@@ -174,7 +218,7 @@ func processUpdate(update CheckUpdate, changeThreshold int, client *api.Client, 
 		log.Errorf("Error storing state for alert in Consul: %s", err)
 	}
 
-	go attemptAlert(int64(changeThreshold), kvPath, client, handlers)
+	go attemptAlert(int64(watchOpts.changeThreshold), kvPath, watchOpts.client, watchOpts.handlers)
 }
 
 func contains(s []string, e string) bool {

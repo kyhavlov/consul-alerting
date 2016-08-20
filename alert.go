@@ -36,6 +36,8 @@ func getAlertStates(kvPath string, client *api.Client) (map[string]*AlertState, 
 		if err != nil {
 			log.Error("Error loading alert state: ", err)
 			return alertStates, err
+		} else if alertState == nil {
+			continue
 		}
 
 		keyName := strings.Split(path, "/")
@@ -57,6 +59,10 @@ func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 
 	if kvPair == nil {
 		return alert, nil
+	}
+
+	if string(kvPair.Value) == "" {
+		return nil, nil
 	}
 
 	err = json.Unmarshal(kvPair.Value, alert)
