@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,16 +19,23 @@ func main() {
 	log.SetFormatter(formatter)
 	log.SetLevel(log.DebugLevel)
 
+	// Get command line options
+	var config_path string
+	flag.StringVar(&config_path, "config", "", "")
+	flag.Parse()
+
 	// Load config
-	config, handlers, err := ParseConfig("example.hcl")
+	config, handlers, err := ParseConfig(config_path)
 	if err != nil {
-		log.Errorf("Error parsing config file: %s", err)
+		log.Error(err)
+		os.Exit(2)
 	}
 
 	// Set log level
 	level, err := log.ParseLevel(config.LogLevel)
 	if err != nil {
-		level = log.InfoLevel
+		log.Errorf("Error setting loglevel '%s': %s", level, err)
+		os.Exit(2)
 	}
 	log.SetLevel(level)
 
@@ -135,10 +143,6 @@ func main() {
 
 	for sig := range c {
 		switch sig {
-		case syscall.SIGHUP:
-			log.Info("Reloading config")
-			// TODO: reload config
-
 		case syscall.SIGINT:
 			shutdown(client, config, shutdownOpts)
 

@@ -38,6 +38,7 @@ func TestParseConfig_correctValues(t *testing.T) {
 	handlers {
 		stdout {
 			enabled = true
+			log_level = "error"
 		}
 		email {
 			enabled = false
@@ -66,7 +67,10 @@ func TestParseConfig_correctValues(t *testing.T) {
 			},
 		},
 		Handlers: HandlerConfig{
-			StdoutHandler{true},
+			StdoutHandler{
+				Enabled: true,
+				LogLevel: "error",
+			},
 			EmailHandler{
 				Enabled:    false,
 				Recipients: []string{"admin@example.com"},

@@ -16,11 +16,25 @@ type AlertHandler interface {
 }
 
 type StdoutHandler struct {
-	Enabled bool `hcl:"enabled"`
+	Enabled  bool   `hcl:"enabled"`
+	LogLevel string `hcl:"log_level"`
 }
 
-func (StdoutHandler) Alert(alert *AlertState) {
-	log.Printf("[ALERT] %s", alert.Message)
+func (s StdoutHandler) Alert(alert *AlertState) {
+	switch strings.ToLower(s.LogLevel) {
+	case "panic":
+		log.Panic(alert.Message)
+	case "fatal":
+		log.Fatal(alert.Message)
+	case "error":
+		log.Error(alert.Message)
+	case "warn", "warning":
+		log.Warn(alert.Message)
+	case "info":
+		log.Info(alert.Message)
+	case "debug":
+		log.Debug(alert.Message)
+	}
 }
 
 type EmailHandler struct {

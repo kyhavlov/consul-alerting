@@ -38,7 +38,7 @@ func ParseConfig(path string) (*Config, []AlertHandler, error) {
 	// Read the file contents
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading config at %q: %s", path, err)
+		return nil, nil, fmt.Errorf("Error loading config file: %s", err)
 	}
 	raw := string(bytes)
 
@@ -68,16 +68,24 @@ func ParseConfig(path string) (*Config, []AlertHandler, error) {
 		}
 	}
 
+	// Configure alert handlers
 	handlers := make([]AlertHandler, 0)
 
 	if config.Handlers.StdoutHandler.Enabled {
+		if config.Handlers.StdoutHandler.LogLevel == "" {
+			config.Handlers.StdoutHandler.LogLevel = "warn"
+		}
+		_, err = log.ParseLevel(config.Handlers.StdoutHandler.LogLevel)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Error parsing loglevel %s: %s", config.Handlers.StdoutHandler.LogLevel, err)
+		}
+		log.Infof("Handler 'stdout' enabled with loglevel %s", config.Handlers.StdoutHandler.LogLevel)
 		handlers = append(handlers, config.Handlers.StdoutHandler)
-		log.Info("Handler 'stdout' enabled")
 	}
 
 	if config.Handlers.EmailHandler.Enabled {
-		handlers = append(handlers, config.Handlers.EmailHandler)
 		log.Info("Handler 'email' enabled")
+		handlers = append(handlers, config.Handlers.EmailHandler)
 	}
 
 	return config, handlers, nil

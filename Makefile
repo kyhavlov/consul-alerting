@@ -1,3 +1,8 @@
+NAME?=$(shell basename "${CURDIR}")
+EXTERNAL_TOOLS=\
+	github.com/mitchellh/gox \
+	github.com/kardianos/govendor
+
 dev: fmt vet
 	@BUILD_DEV=1 sh -c "'$(PWD)/scripts/build.sh'"
 
@@ -13,4 +18,10 @@ vet:
 test: fmt vet
 	@go test
 
-.PHONY: dev bin fmt test vet
+bootstrap:
+	@for tool in  $(EXTERNAL_TOOLS) ; do \
+		echo "Installing $$tool" ; \
+    go get -u $$tool; \
+	done
+
+.PHONY: bootstrap dev bin fmt test vet

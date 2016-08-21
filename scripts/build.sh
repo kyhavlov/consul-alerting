@@ -16,7 +16,7 @@ GIT_DIRTY="$(test -n "`git status --porcelain`" && echo "+CHANGES" || true)"
 
 # Determine the arch/os combos we're building for
 XC_ARCH=${XC_ARCH:-"amd64"}
-XC_OS=${XC_OS:-"darwin linux"}
+XC_OS=${XC_OS:-"darwin linux windows"}
 
 # Delete the old dir
 echo "==> Removing old directory..."
