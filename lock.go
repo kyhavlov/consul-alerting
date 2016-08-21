@@ -30,12 +30,12 @@ func (l *LockHelper) start() {
 			log.Infof("Waiting to acquire lock on %s...", l.target)
 			intChan, err := l.lock.Lock(l.lockCh)
 			if intChan != nil {
-				log.Infof("Acquired lock for %s alerts", l.target)
+				log.Infof("Acquired lock for %s", l.target)
 				l.callback()
 				l.acquired = true
 				<-intChan
 				l.acquired = false
-				log.Infof("Lost lock for %s alerts", l.target)
+				log.Infof("Lost lock for %s", l.target)
 				l.lock.Unlock()
 				l.lock.Destroy()
 			} else {

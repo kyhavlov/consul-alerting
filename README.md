@@ -77,4 +77,27 @@ Handlers must have `enabled = true` in order to be active.
 | ------------------ |------------ |
 | `recipients`       | A list of email addresses to send alerts to.
 
+#### Example log output:
+```
+[Aug 21 19:15:19]  INFO Handler 'stdout' enabled with loglevel warn
+[Aug 21 19:15:20]  INFO Running in local mode, monitoring node consul's services
+[Aug 21 19:15:20]  INFO Waiting to acquire lock on node consul...
+[Aug 21 19:15:20]  INFO Service found: consul, tags: []
+[Aug 21 19:15:20]  INFO Service found: nginx, tags: [gamma delta]
+[Aug 21 19:15:20]  INFO Service found: redis, tags: [alpha beta]
+[Aug 21 19:15:20]  INFO Waiting to acquire lock on service nginx...
+[Aug 21 19:15:20]  INFO Waiting to acquire lock on service redis (tag: alpha)...
+[Aug 21 19:15:20]  INFO Waiting to acquire lock on service redis (tag: beta)...
+[Aug 21 19:15:20]  INFO Waiting to acquire lock on service consul...
+[Aug 21 19:15:20]  INFO Acquired lock for node consul
+[Aug 21 19:15:20]  INFO Acquired lock for service nginx
+[Aug 21 19:15:20]  INFO Acquired lock for service consul
+[Aug 21 19:15:20]  INFO Acquired lock for service redis (tag: alpha)
+[Aug 21 19:15:20]  INFO Acquired lock for service redis (tag: beta)
+[Aug 21 19:15:30]  WARN service nginx is now warning (Unhealthy nodes: [consul])
+[Aug 21 19:15:46]  WARN service nginx is now critical (Unhealthy nodes: [consul])
+[Aug 21 19:15:58]  WARN node consul is now warning (Failing checks: [memory usage Service 'nginx' check Service 'redis' check])
+[Aug 21 19:15:59]  WARN service redis (tag: alpha) is now warning (Unhealthy nodes: [consul])
+```
+
 [HCL]: https://github.com/hashicorp/hcl "HashiCorp Configuration Language (HCL)"

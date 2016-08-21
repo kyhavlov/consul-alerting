@@ -63,12 +63,13 @@ func main() {
 	if err != nil {
 		log.Fatal("Error initializing client: ", err)
 	}
+	var nodeName string
 	for {
-		_, err = client.Status().Leader()
+		nodeName, err = client.Agent().NodeName()
 		if err == nil {
 			break
 		}
-		log.Error("Error connecting to Consul: ", err)
+		log.Error("Error connecting to Consul agent: ", err)
 		log.Error("Retrying in 10s...")
 		time.Sleep(10 * time.Second)
 	}
@@ -77,111 +78,16 @@ func main() {
 		registerTestServices(client)
 	}
 
-	if config.GlobalMode {
-		log.Info("Running in global mode, monitoring all nodes/services")
-	} else {
-		log.Info("Running in local mode, monitoring local agent's nodes/services")
-	}
-
-	// Find services to watch
-	services := make(map[string][]string)
-	nodes := make([]string, 0)
-	if config.GlobalMode {
-		log.Info("Discovering services to watch from catalog")
-		services, _, err = client.Catalog().Services(&api.QueryOptions{})
-		if err != nil {
-			log.Fatal("Error initializing services: ", err)
-		}
-
-		log.Info("Discovering nodes to watch from catalog")
-		allNodes, _, err := client.Catalog().Nodes(&api.QueryOptions{})
-		if err == nil {
-			for _, node := range allNodes {
-				nodes = append(nodes, node.Node)
-			}
-		} else {
-			log.Errorf("Error getting nodes from catalog: %s", err)
-		}
-	} else {
-		log.Info("Discovering services to watch on local agent")
-		serviceMap, err := client.Agent().Services()
-		if err != nil {
-			log.Fatal("Error initializing services: ", err)
-		}
-		for _, config := range serviceMap {
-			services[config.Service] = config.Tags
-		}
-
-		log.Info("Watching local node")
-		node, err := client.Agent().NodeName()
-		if err == nil {
-			nodes = append(nodes, node)
-		} else {
-			log.Errorf("Error getting local node name: %s", err)
-		}
-	}
-
 	shutdownOpts := &ShutdownOpts{
 		stopCh: make(chan struct{}, 0),
 	}
 
-	// Initialize service watches
-	for service, tags := range services {
-		log.Infof("Service found: %s, tags: %v", service, tags)
-		serviceConfig := config.getServiceConfig(service)
-
-		// Watch each tag separately if the flag is set
-		if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
-			for _, tag := range tags {
-				if !contains(serviceConfig.IgnoredTags, tag) {
-					go watch(&WatchOptions{
-						service:         service,
-						tag:             tag,
-						changeThreshold: serviceConfig.ChangeThreshold,
-						diffCheckFunc:   diffServiceChecks,
-						client:          client,
-						handlers:        handlers,
-						stopCh:          shutdownOpts.stopCh,
-					})
-					shutdownOpts.count++
-				}
-			}
-		} else {
-			go watch(&WatchOptions{
-				service:         service,
-				changeThreshold: config.ChangeThreshold,
-				diffCheckFunc:   diffServiceChecks,
-				client:          client,
-				handlers:        handlers,
-				stopCh:          shutdownOpts.stopCh,
-			})
-			shutdownOpts.count++
-		}
-	}
-
-	// Initialize node watches
-	log.Infof("Nodes found: %v", nodes)
-	for _, node := range nodes {
-		opts := &WatchOptions{
-			node:            node,
-			changeThreshold: config.ChangeThreshold,
-			diffCheckFunc:   diffNodeChecks,
-			client:          client,
-			handlers:        handlers,
-		}
-		if config.GlobalMode {
-			opts.stopCh = shutdownOpts.stopCh
-			shutdownOpts.count++
-		}
-		go watch(opts)
-	}
+	initializeWatches(nodeName, config, handlers, shutdownOpts, client)
 
 	// Set up signal handling for graceful shutdown
 	c := make(chan os.Signal, 1)
 
 	signal.Notify(c)
-
-	log.Infof("Watch (lock) count: %d", shutdownOpts.count)
 
 	for sig := range c {
 		switch sig {

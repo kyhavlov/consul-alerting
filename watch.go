@@ -82,7 +82,8 @@ func watch(opts *WatchOptions) {
 		Tag:     opts.tag,
 	}
 
-	// Set up a callback to be run when we acquire the lock/gain leadership
+	// Set up a callback to be run when we acquire the lock/gain leadership so we can
+	// grab the last check/alert states
 	loadCheckStates := func() {
 		storedCheckStates, err := getCheckStates(keyPath, client)
 
@@ -90,8 +91,9 @@ func watch(opts *WatchOptions) {
 			log.Error("Error loading previous check states from consul: ", err)
 		}
 
-		for checkName, alertState := range storedCheckStates {
-			lastCheckStatus[checkName] = alertState.Status
+		for checkName, checkState := range storedCheckStates {
+			log.Debugf("Loaded check %s for %s, state: %s", checkName, name, checkState.Status)
+			lastCheckStatus[checkName] = checkState.Status
 		}
 
 		alert, err := getAlertState(alertPath, client)
@@ -113,7 +115,7 @@ func watch(opts *WatchOptions) {
 	}
 
 	lock := LockHelper{
-		target:   mode + " " + name,
+		target:   name,
 		path:     lockPath,
 		client:   client,
 		lock:     apiLock,
@@ -171,7 +173,7 @@ func watch(opts *WatchOptions) {
 
 			// Try to write the health updates to consul
 			for _, update := range updates {
-				log.Debugf("Updating health check '%s' for %s", update.HealthCheck.Name, name)
+				log.Debugf("Updating health check '%s' (%s) for %s", update.HealthCheck.Name, update.Status, name)
 				if !updateCheckState(update, client) {
 					success = false
 				}
@@ -181,7 +183,7 @@ func watch(opts *WatchOptions) {
 			if mode == NodeWatch {
 				failingChecks := make([]string, 0)
 				for _, check := range checks {
-					if check.ServiceID == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+					if check.ServiceName == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
 						failingChecks = append(failingChecks, check.Name)
 					}
 				}
@@ -204,6 +206,7 @@ func watch(opts *WatchOptions) {
 				// If the alert status changed, try to trigger an alert
 				newStatus := computeHealth(lastCheckStatus)
 				if alertState.Status != newStatus {
+					log.Debugf("%s state changed to %s, attempting alert", name, newStatus)
 					alertState.Status = newStatus
 					alertState.Message = fmt.Sprintf("%s is now %s", name, alertState.Status)
 					if setAlertState(alertPath, alertState, client) {
@@ -270,6 +273,184 @@ func diffNodeChecks(checks []*api.HealthCheck, lastStatus map[string]string, opt
 type CheckUpdate struct {
 	ServiceTag string
 	*api.HealthCheck
+}
+
+// Spawns watches for services, adding more when new services are discovered
+func discoverServices(nodeName string, config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+	queryOpts := &api.QueryOptions{
+		AllowStale: true,
+		WaitTime:   watchWaitTime,
+	}
+
+	// Used to store services we've already started watches for
+	services := make(map[string][]string)
+
+	for {
+		var queryMeta *api.QueryMeta
+		currentServices := make(map[string][]string)
+		var err error
+
+		// Watch either all services or just the local node's, depending on whether GlobalMode is set
+		if config.GlobalMode {
+			currentServices, queryMeta, err = client.Catalog().Services(queryOpts)
+		} else {
+			var node *api.CatalogNode
+			node, queryMeta, err = client.Catalog().Node(nodeName, queryOpts)
+			if err == nil {
+				// Build the map of service:[tags]
+				for _, config := range node.Services {
+					if _, ok := currentServices[config.Service]; ok {
+						currentServices[config.Service] = config.Tags
+					} else {
+						currentServices[config.Service] = append(currentServices[config.Service], config.Tags...)
+					}
+				}
+			}
+		}
+
+		if err != nil {
+			log.Errorf("Error trying to watch services: %s, retrying in 10s...", err)
+			time.Sleep(errorWaitTime)
+			continue
+		}
+
+		// Update our WaitIndex for the next query
+		queryOpts.WaitIndex = queryMeta.LastIndex
+
+		for service, tags := range currentServices {
+			serviceConfig := config.getServiceConfig(service)
+
+			// Override the global changeThreshold config if we have a service-specific one
+			changeThreshold := config.ChangeThreshold
+			if serviceConfig != nil {
+				changeThreshold = serviceConfig.ChangeThreshold
+			}
+
+			// See if we found a new service
+			if _, ok := services[service]; !ok {
+				log.Infof("Service found: %s, tags: %v", service, tags)
+				services[service] = tags
+
+				// Create a watch for each tag if DistinctTags is set
+				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
+					for _, tag := range tags {
+						watchOpts := &WatchOptions{
+							service:         service,
+							tag:             tag,
+							changeThreshold: changeThreshold,
+							diffCheckFunc:   diffServiceChecks,
+							client:          client,
+							handlers:        handlers,
+							stopCh:          shutdownOpts.stopCh,
+						}
+						shutdownOpts.count++
+						go watch(watchOpts)
+					}
+				} else {
+					// If it isn't, just start one watch for the service
+					watchOpts := &WatchOptions{
+						service:         service,
+						changeThreshold: changeThreshold,
+						diffCheckFunc:   diffServiceChecks,
+						client:          client,
+						handlers:        handlers,
+						stopCh:          shutdownOpts.stopCh,
+					}
+					shutdownOpts.count++
+					go watch(watchOpts)
+				}
+			} else {
+				// Check for new, non-ignored tags if DistinctTags is set
+				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
+					services[service] = tags
+
+					for _, tag := range tags {
+						if !contains(serviceConfig.IgnoredTags, tag) && !contains(services[service], tag) {
+							go watch(&WatchOptions{
+								service:         service,
+								tag:             tag,
+								changeThreshold: changeThreshold,
+								diffCheckFunc:   diffServiceChecks,
+								client:          client,
+								handlers:        handlers,
+								stopCh:          shutdownOpts.stopCh,
+							})
+							shutdownOpts.count++
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// Queries the catalog for nodes and starts watches for them
+func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+	queryOpts := &api.QueryOptions{
+		AllowStale: true,
+		WaitTime:   watchWaitTime,
+	}
+
+	// Used to store nodes we've already started watches for
+	nodes := make([]string, 0)
+
+	for {
+		currentNodes, queryMeta, err := client.Catalog().Nodes(queryOpts)
+
+		if err != nil {
+			log.Errorf("Error trying to watch node list: %s, retrying in 10s...", err)
+			time.Sleep(errorWaitTime)
+			continue
+		}
+
+		// Update our WaitIndex for the next query
+		queryOpts.WaitIndex = queryMeta.LastIndex
+
+		for _, node := range currentNodes {
+			nodeName := node.Node
+			if !contains(nodes, nodeName) {
+				log.Infof("Discovered new node: %s", nodeName)
+				opts := &WatchOptions{
+					node:            nodeName,
+					changeThreshold: config.ChangeThreshold,
+					diffCheckFunc:   diffNodeChecks,
+					client:          client,
+					handlers:        handlers,
+				}
+				if config.GlobalMode {
+					opts.stopCh = shutdownOpts.stopCh
+					shutdownOpts.count++
+				}
+				nodes = append(nodes, nodeName)
+				go watch(opts)
+			}
+		}
+	}
+}
+
+// Starts the discovery of nodes/services, depending on how GlobalMode is set
+func initializeWatches(nodeName string, config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+
+	if config.GlobalMode {
+		log.Info("Running in global mode, monitoring all nodes/services")
+		go discoverServices(nodeName, config, handlers, shutdownOpts, client)
+		go discoverNodes(config, handlers, shutdownOpts, client)
+	} else {
+		log.Infof("Running in local mode, monitoring node %s's services", nodeName)
+		go discoverServices(nodeName, config, handlers, shutdownOpts, client)
+
+		// We don't need to discover the local node, it won't change
+		opts := &WatchOptions{
+			node:            nodeName,
+			changeThreshold: config.ChangeThreshold,
+			diffCheckFunc:   diffNodeChecks,
+			client:          client,
+			handlers:        handlers,
+			stopCh:          shutdownOpts.stopCh,
+		}
+		shutdownOpts.count++
+		go watch(opts)
+	}
 }
 
 func contains(s []string, e string) bool {
