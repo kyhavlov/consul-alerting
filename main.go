@@ -13,8 +13,7 @@ import (
 	"time"
 )
 
-const usage =
-`Usage: consul-alerting [--help] -config=/path/to/config.hcl
+const usage = `Usage: consul-alerting [--help] -config=/path/to/config.hcl
 
 Options:
 
@@ -135,8 +134,11 @@ func main() {
 		if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
 			for _, tag := range tags {
 				if !contains(serviceConfig.IgnoredTags, tag) {
-					go WatchService(service, tag, &WatchOptions{
+					go watch(&WatchOptions{
+						service:         service,
+						tag:             tag,
 						changeThreshold: serviceConfig.ChangeThreshold,
+						diffCheckFunc:   diffServiceChecks,
 						client:          client,
 						handlers:        handlers,
 						stopCh:          shutdownOpts.stopCh,
@@ -145,8 +147,10 @@ func main() {
 				}
 			}
 		} else {
-			go WatchService(service, "", &WatchOptions{
+			go watch(&WatchOptions{
+				service:         service,
 				changeThreshold: config.ChangeThreshold,
+				diffCheckFunc:   diffServiceChecks,
 				client:          client,
 				handlers:        handlers,
 				stopCh:          shutdownOpts.stopCh,
@@ -159,7 +163,9 @@ func main() {
 	log.Infof("Nodes found: %v", nodes)
 	for _, node := range nodes {
 		opts := &WatchOptions{
+			node:            node,
 			changeThreshold: config.ChangeThreshold,
+			diffCheckFunc:   diffNodeChecks,
 			client:          client,
 			handlers:        handlers,
 		}
@@ -167,13 +173,15 @@ func main() {
 			opts.stopCh = shutdownOpts.stopCh
 			shutdownOpts.count++
 		}
-		go WatchNode(node, opts)
+		go watch(opts)
 	}
 
 	// Set up signal handling for graceful shutdown
 	c := make(chan os.Signal, 1)
 
 	signal.Notify(c)
+
+	log.Infof("Watch (lock) count: %d", shutdownOpts.count)
 
 	for sig := range c {
 		switch sig {

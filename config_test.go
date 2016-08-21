@@ -68,7 +68,7 @@ func TestParseConfig_correctValues(t *testing.T) {
 		},
 		Handlers: HandlerConfig{
 			StdoutHandler{
-				Enabled: true,
+				Enabled:  true,
 				LogLevel: "error",
 			},
 			EmailHandler{
@@ -78,7 +78,10 @@ func TestParseConfig_correctValues(t *testing.T) {
 		},
 	}
 	expectedHandlers := []AlertHandler{
-		StdoutHandler{true},
+		StdoutHandler{
+			Enabled:  true,
+			LogLevel: "error",
+		},
 	}
 
 	if !reflect.DeepEqual(config, expected) {

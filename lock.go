@@ -16,6 +16,7 @@ type LockHelper struct {
 	lock     *api.Lock
 	stopCh   chan struct{}
 	lockCh   chan struct{}
+	callback func()
 	acquired bool
 }
 
@@ -30,6 +31,7 @@ func (l *LockHelper) start() {
 			intChan, err := l.lock.Lock(l.lockCh)
 			if intChan != nil {
 				log.Infof("Acquired lock for %s alerts", l.target)
+				l.callback()
 				l.acquired = true
 				<-intChan
 				l.acquired = false

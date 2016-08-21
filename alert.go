@@ -2,15 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/consul/api"
 )
 
-// AlertState represents the last known state of an alert, stored Consul's KV store
 type AlertState struct {
 	Status      string `json:"status"`
 	Node        string `json:"node"`
@@ -18,78 +15,72 @@ type AlertState struct {
 	Tag         string `json:"tag"`
 	LastUpdated int64  `json:"last_updated"`
 	Message     string `json:"message"`
+	Details     string `json:"details"`
 }
 
-// Returns a map of nodename/checkname strings to AlertStates from the given KV prefix
-func getAlertStates(kvPath string, client *api.Client) (map[string]*AlertState, error) {
-	alertStates := make(map[string]*AlertState)
-	keys, _, err := client.KV().Keys(kvPath, "", nil)
-
-	if err != nil {
-		log.Error("Error loading previous alert states: ", err)
-		return alertStates, err
-	}
-
-	for _, path := range keys {
-		alertState, err := getAlertState(path, client)
-
-		if err != nil {
-			log.Error("Error loading alert state: ", err)
-			return alertStates, err
-		} else if alertState == nil {
-			continue
-		}
-
-		keyName := strings.Split(path, "/")
-		checkName := keyName[len(keyName)-2] + "/" + keyName[len(keyName)-1]
-		alertStates[checkName] = alertState
-	}
-
-	return alertStates, nil
-}
-
-// Parses an AlertState from a given Consul K/V path
+// Parses a CheckState from a given Consul K/V path
 func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 	kvPair, _, err := client.KV().Get(kvPath, nil)
-	alert := &AlertState{}
+	check := &AlertState{}
 
 	if err != nil {
-		log.Error("Error checking alert state: ", err)
+		log.Error("Error loading alert state: ", err)
 		return nil, err
 	}
 
 	if kvPair == nil {
-		return alert, nil
+		return nil, nil
 	}
 
 	if string(kvPair.Value) == "" {
 		return nil, nil
 	}
 
-	err = json.Unmarshal(kvPair.Value, alert)
+	err = json.Unmarshal(kvPair.Value, check)
 
 	if err != nil {
 		log.Error("Error parsing alert state: ", err)
 		return nil, err
 	}
 
-	return alert, nil
+	return check, nil
+}
+
+// Sets an alert state in at a given K/V path, returns true if succeeded
+func setAlertState(kvPath string, alert *AlertState, client *api.Client) bool {
+	alert.LastUpdated = time.Now().Unix()
+
+	serialized, err := json.Marshal(alert)
+	if err != nil {
+		log.Errorf("Error forming state for alert in Consul: %s", err)
+		return false
+	}
+
+	_, err = client.KV().Put(&api.KVPair{
+		Key:   kvPath,
+		Value: serialized,
+	}, nil)
+
+	if err != nil {
+		log.Errorf("Error storing state for alert in Consul: %s", err)
+		return false
+	}
+	return true
 }
 
 // Sleeps for changeThreshold duration, then alerts if the state has not changed
-func attemptAlert(changeThreshold int, kvPath string, client *api.Client, handlers []AlertHandler) {
-	time.Sleep(time.Duration(changeThreshold) * time.Second)
+func tryAlert(kvPath string, watchOpts *WatchOptions) {
+	time.Sleep(time.Duration(watchOpts.changeThreshold) * time.Second)
 
-	alertState, err := getAlertState(kvPath, client)
+	alertState, err := getAlertState(kvPath, watchOpts.client)
 
 	if err != nil {
 		log.Error("Error fetching alert state: ", err)
 		return
 	}
 
-	if time.Now().Unix()-int64(changeThreshold) >= alertState.LastUpdated {
-		alertState.Message = alertState.Message + fmt.Sprintf(" for %d seconds", changeThreshold)
-		for _, handler := range handlers {
+	if time.Now().Unix()-int64(watchOpts.changeThreshold) >= alertState.LastUpdated {
+		for _, handler := range watchOpts.handlers {
 			handler.Alert(alertState)
 		}
 	}

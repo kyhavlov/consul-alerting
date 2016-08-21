@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -13,69 +12,126 @@ const watchWaitTime = 15 * time.Second
 const errorWaitTime = 10 * time.Second
 
 type WatchOptions struct {
+	node            string
+	service         string
+	tag             string
 	changeThreshold int
+	diffCheckFunc   func(checks []*api.HealthCheck, lastStatus map[string]string, opts *WatchOptions) map[string]CheckUpdate
 	client          *api.Client
 	handlers        []AlertHandler
 	stopCh          chan struct{}
 }
 
-// Watches a service for changes in health, updating the given handlers when an alert fires
-func WatchService(service string, tag string, watchOpts *WatchOptions) {
+const ServiceWatch = "service"
+const NodeWatch = "node"
+
+/*  Watches a service or node for changes in health, updating the given handlers when an alert fires.
+
+Each watch is responsible for alerting on its own node/service, by watching the health check
+endpoint for the node/service.
+
+The general workflow for a watch is:
+1. Block until acquiring the lock
+2. Upon acquiring the lock, read the previous check/alert state from the Consul K/V store
+3. While we have the lock, loop through the following:
+	- Do a blocking query for up to watchWaitTime to get new health check updates
+	- Compare the returned health checks to the local cache to see if any changed
+	- If we got relevant health check updates (checks for our specific service tag, for example)
+	  then see if that changes the overall service/node health
+	- If it does, try to alert with the latest info for this node/service. At this point we spawn
+	  a goroutine to wait for changeThreshold seconds before firing an alert if the status stays
+	  stable, and go back to the beginning of 3.
+
+This ensures that only one process can manage the alerts for a node/service at any given time, and
+that the check/alert state is persisted across restarts/lock acquisitions.
+*/
+func watch(opts *WatchOptions) {
 	// Set wait time to make the consul query block until an update happens
-	client := watchOpts.client
+	client := opts.client
 	queryOpts := &api.QueryOptions{
 		AllowStale: true,
-		WaitTime: watchWaitTime,
+		WaitTime:   watchWaitTime,
 	}
 
-	tagDisplay := ""
-	tagPath := ""
-	if tag != "" {
-		tagPath = tag + "/"
-		tagDisplay = fmt.Sprintf(" (tag: %s)", tag)
+	mode := NodeWatch
+	if opts.service != "" {
+		mode = ServiceWatch
 	}
 
-	keyPath := "service/consul-alerting/service/" + service + "/" + tagPath
+	name := mode + " " + opts.node
 
-	// Load previous alert states for this service from consul
+	// The base path in the consul KV store to keep the state for this watch
+	keyPath := "service/consul-alerting/node/" + opts.node + "/"
+	if mode == ServiceWatch {
+		name = mode + " " + opts.service
+		tagPath := ""
+		if opts.tag != "" {
+			tagPath = opts.tag + "/"
+			name = name + fmt.Sprintf(" (tag: %s)", opts.tag)
+		}
+		keyPath = "service/consul-alerting/service/" + opts.service + "/" + tagPath
+	}
+	lockPath := keyPath + "leader"
+	alertPath := keyPath + "alert"
+
+	// Load previously stored check states for this watch from consul
 	lastCheckStatus := make(map[string]string)
-	storedAlertStates, err := getAlertStates(keyPath, client)
-
-	if err != nil {
-		log.Error("Error loading previous alert states from consul: ", err)
+	alertState := &AlertState{
+		Node:    opts.node,
+		Service: opts.service,
+		Tag:     opts.tag,
 	}
 
-	for checkName, alertState := range storedAlertStates {
-		lastCheckStatus[checkName] = alertState.Status
+	// Set up a callback to be run when we acquire the lock/gain leadership
+	loadCheckStates := func() {
+		storedCheckStates, err := getCheckStates(keyPath, client)
+
+		if err != nil {
+			log.Error("Error loading previous check states from consul: ", err)
+		}
+
+		for checkName, alertState := range storedCheckStates {
+			lastCheckStatus[checkName] = alertState.Status
+		}
+
+		alert, err := getAlertState(alertPath, client)
+
+		if err != nil {
+			log.Error("Error loading previous alert state from consul: ", err)
+		}
+
+		if alert != nil {
+			alertState = alert
+		}
 	}
 
 	// Set up the lock this thread will use to determine leader status
-	lockPath := keyPath + "leader"
 	apiLock, err := client.LockKey(lockPath)
 
 	if err != nil {
-		log.Fatalf("Error initializing lock for service %s%s: %s", service, tagDisplay, err)
+		log.Fatalf("Error initializing lock for %s: %s", name, err)
 	}
 
 	lock := LockHelper{
-		target: "service " + service + tagDisplay,
-		path:   lockPath,
-		client: client,
-		lock:   apiLock,
-		stopCh: make(chan struct{}, 1),
-		lockCh: make(chan struct{}, 1),
+		target:   mode + " " + name,
+		path:     lockPath,
+		client:   client,
+		lock:     apiLock,
+		stopCh:   make(chan struct{}, 1),
+		lockCh:   make(chan struct{}, 1),
+		callback: loadCheckStates,
 	}
 	go lock.start()
 
-	log.Debugf("Initialized watch for service: %s%s", service, tagDisplay)
+	log.Debugf("Initialized watch for %s", name)
 
 	for {
 		// Check for shutdown event
 		select {
-		case <-watchOpts.stopCh:
-			log.Infof("Shutting down watch for service %s%s", service, tagDisplay)
+		case <-opts.stopCh:
+			log.Infof("Shutting down watch for %s", name)
 			lock.stop()
-			<-watchOpts.stopCh
+			<-opts.stopCh
 			break
 		default:
 		}
@@ -86,185 +142,134 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 			continue
 		}
 
-		// Do a blocking query (a consul watch) for the health of the service
-		checks, queryMeta, err := client.Health().Checks(service, queryOpts)
+		var checks []*api.HealthCheck
+		var queryMeta *api.QueryMeta
+		var err error
+		// Do a blocking query (a consul watch) for the health checks
+		if mode == NodeWatch {
+			checks, queryMeta, err = client.Health().Node(opts.node, queryOpts)
+		} else {
+			checks, queryMeta, err = client.Health().Checks(opts.service, queryOpts)
+		}
 
 		if err != nil {
-			log.Errorf("Error trying to watch service: %s, retrying in 10s...", err)
+			log.Errorf("Error trying to watch %s: %s, retrying in 10s...", mode, err)
 			time.Sleep(errorWaitTime)
 			continue
 		}
 
+		// Update our WaitIndex for the next query
 		queryOpts.WaitIndex = queryMeta.LastIndex
 
-		for _, check := range checks {
-			// Determine whether the check changed status
-			if oldStatus, ok := lastCheckStatus[check.Node+"/"+check.CheckID]; ok && oldStatus != check.Status {
-				// If it did, make sure it's for our tag (if specified)
-				if tag != "" {
-					node, _, err := client.Catalog().Node(check.Node, nil)
-					if err != nil {
-						log.Errorf("Error trying to get service info for node '%s': %s", check.Node, err)
-						continue
-					}
+		// Filter out health checks whose statuses haven't changed
+		updates := opts.diffCheckFunc(checks, lastCheckStatus, opts)
 
-					if nodeService, ok := node.Services[service]; ok && contains(nodeService.Tags, tag) {
-						processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, watchOpts)
-					}
-				} else {
-					processUpdate(CheckUpdate{ServiceTag: tag, HealthCheck: check}, watchOpts)
+		// If there's any health check status changes, try to update the remote/local check caches and
+		// see if the alert status changed
+		if len(updates) > 0 {
+			success := true
+
+			// Try to write the health updates to consul
+			for _, update := range updates {
+				log.Debugf("Updating health check '%s' for %s", update.HealthCheck.Name, name)
+				if !updateCheckState(update, client) {
+					success = false
 				}
-				lastCheckStatus[check.Node+"/"+check.CheckID] = check.Status
+			}
+
+			// Update the alert details
+			if mode == NodeWatch {
+				failingChecks := make([]string, 0)
+				for _, check := range checks {
+					if check.ServiceID == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+						failingChecks = append(failingChecks, check.Name)
+					}
+				}
+				alertState.Details = fmt.Sprintf("Failing checks: %v", failingChecks)
 			} else {
-				lastCheckStatus[check.Node+"/"+check.CheckID] = api.HealthPassing
+				unhealthyNodes := make([]string, 0)
+				for _, check := range checks {
+					if check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+						unhealthyNodes = append(unhealthyNodes, check.Node)
+					}
+				}
+				alertState.Details = fmt.Sprintf("Unhealthy nodes: %v", unhealthyNodes)
+			}
+
+			if success {
+				for checkHash, update := range updates {
+					lastCheckStatus[checkHash] = update.Status
+				}
+
+				// If the alert status changed, try to trigger an alert
+				newStatus := computeHealth(lastCheckStatus)
+				if alertState.Status != newStatus {
+					alertState.Status = newStatus
+					alertState.Message = fmt.Sprintf("%s is now %s", name, alertState.Status)
+					if setAlertState(alertPath, alertState, client) {
+						go tryAlert(alertPath, opts)
+					}
+				}
 			}
 		}
 	}
 }
 
-// Watches a node for changes in health
-func WatchNode(node string, watchOpts *WatchOptions) {
-	// Set the options for the watch query
-	queryOpts := &api.QueryOptions{
-		AllowStale: true,
-		WaitTime: watchWaitTime,
-	}
+// Returns a map of checks whose status differs from their entry in lastStatus
+func diffServiceChecks(checks []*api.HealthCheck, lastStatus map[string]string, opts *WatchOptions) map[string]CheckUpdate {
+	updates := make(map[string]CheckUpdate)
 
-	client := watchOpts.client
-	keyPath := "service/consul-alerting/node/"+node+"/"
-	lastCheckStatus := make(map[string]string)
-	storedAlertStates, err := getAlertStates(keyPath, client)
+	for _, check := range checks {
+		checkHash := check.Node + "/" + check.CheckID
+		// Determine whether the check changed status
+		if oldStatus, ok := lastStatus[checkHash]; ok && oldStatus != check.Status {
+			// If it did, make sure it's for our tag (if specified)
+			if opts.tag != "" {
+				nodeServices, err := opts.client.Agent().Services()
 
-	if err != nil {
-		log.Error("Error loading previous alert states from consul: ", err)
-	}
-
-	for checkName, alertState := range storedAlertStates {
-		lastCheckStatus[checkName] = alertState.Status
-	}
-
-	// If we're in global mode, we need a lock to watch this node because we may
-	// not be the only one trying to do so
-	globalMode := watchOpts.stopCh != nil
-	var lock LockHelper
-	if globalMode {
-		// Set up the lock this thread will use to determine leader status
-		lockPath := keyPath + "leader"
-		apiLock, err := client.LockKey(lockPath)
-
-		if err != nil {
-			log.Fatalf("Error initializing lock for node %s: %s", node, err)
-		}
-
-		lock = LockHelper{
-			target: "node " + node,
-			path:   lockPath,
-			client: client,
-			lock:   apiLock,
-			stopCh: make(chan struct{}, 1),
-			lockCh: make(chan struct{}, 1),
-		}
-		go lock.start()
-	}
-
-	log.Debugf("Initialized watch for node: %s", node)
-
-	for {
-		if globalMode {
-			// Check for shutdown event
-			select {
-			case <-watchOpts.stopCh:
-				log.Infof("Shutting down watch for node %s", node)
-				lock.stop()
-				<-watchOpts.stopCh
-				break
-			default:
-			}
-
-			// Sleep if we don't hold the lock
-			if !lock.acquired {
-				time.Sleep(1 * time.Second)
-				continue
-			}
-		}
-
-		// Do a blocking query (a consul watch) for the health of the node
-		checks, queryMeta, err := client.Health().Node(node, queryOpts)
-
-		if err != nil {
-			log.Errorf("Error trying to watch node: %s, retrying in 10s...", err)
-			time.Sleep(errorWaitTime)
-			continue
-		}
-
-		queryOpts.WaitIndex = queryMeta.LastIndex
-
-		//log.Debugf("Got watch return for node %s", node)
-
-		for _, check := range checks {
-			if check.ServiceID == "" {
-				// Determine whether the check changed status
-				if oldStatus, ok := lastCheckStatus[node+"/"+check.CheckID]; ok && oldStatus != check.Status {
-					processUpdate(CheckUpdate{HealthCheck: check}, watchOpts)
+				if err != nil {
+					log.Errorf("Error trying to get service info for node '%s': %s", check.Node, err)
+					continue
 				}
-				lastCheckStatus[node+"/"+check.CheckID] = check.Status
+
+				if nodeService, ok := nodeServices[opts.service]; ok && contains(nodeService.Tags, opts.tag) {
+					updates[checkHash] = CheckUpdate{ServiceTag: opts.tag, HealthCheck: check}
+				}
+			} else {
+				updates[checkHash] = CheckUpdate{HealthCheck: check}
+			}
+		} else {
+			updates[checkHash] = CheckUpdate{ServiceTag: opts.tag, HealthCheck: check}
+		}
+	}
+
+	return updates
+}
+
+// Returns a map of checks whose status differs from their entry in lastStatus
+func diffNodeChecks(checks []*api.HealthCheck, lastStatus map[string]string, opts *WatchOptions) map[string]CheckUpdate {
+	updates := make(map[string]CheckUpdate)
+
+	for _, check := range checks {
+		checkHash := opts.node + "/" + check.CheckID
+		if check.ServiceID == "" {
+			// Determine whether the check changed status
+			if oldStatus, ok := lastStatus[checkHash]; ok {
+				if oldStatus != check.Status {
+					updates[checkHash] = CheckUpdate{HealthCheck: check}
+				}
+			} else {
+				updates[checkHash] = CheckUpdate{HealthCheck: check}
 			}
 		}
 	}
+
+	return updates
 }
 
 type CheckUpdate struct {
 	ServiceTag string
 	*api.HealthCheck
-}
-
-// processUpdate updates the state of an alert stored in the Consul key-value store
-// based on the given CheckUpdate
-func processUpdate(update CheckUpdate, watchOpts *WatchOptions) {
-	check := update.HealthCheck
-
-	kvPath := "service/consul-alerting"
-	message := ""
-
-	if check.ServiceID != "" {
-		tagPath, tagInfo := "", ""
-		if update.ServiceTag != "" {
-			tagPath = fmt.Sprintf("%s/", update.ServiceTag)
-			tagInfo = fmt.Sprintf(" (tag: %s)", update.ServiceTag)
-		}
-		message = fmt.Sprintf("Check '%s' in service '%s'%s on node %s is %s",
-			check.CheckID, check.ServiceID, tagInfo, check.Node, check.Status)
-
-		kvPath = kvPath + fmt.Sprintf("/service/%s/%s%s/%s", check.ServiceID, tagPath, check.Node, check.CheckID)
-	} else {
-		message = fmt.Sprintf("Check '%s' on node %s is %s", check.CheckID, check.Node, check.Status)
-		kvPath = kvPath + fmt.Sprintf("/node/%s/%s", check.Node, check.CheckID)
-	}
-
-	log.Debug(message)
-
-	status, err := json.Marshal(AlertState{
-		Status:      check.Status,
-		Node:        check.Node,
-		Service:     check.ServiceName,
-		Tag:         update.ServiceTag,
-		LastUpdated: time.Now().Unix(),
-		Message:     message,
-	})
-	if err != nil {
-		log.Errorf("Error forming state for alert in Consul: %s", err)
-	}
-
-	_, err = watchOpts.client.KV().Put(&api.KVPair{
-		Key:   kvPath,
-		Value: status,
-	}, nil)
-
-	if err != nil {
-		log.Errorf("Error storing state for alert in Consul: %s", err)
-	}
-
-	go attemptAlert(watchOpts.changeThreshold, kvPath, watchOpts.client, watchOpts.handlers)
 }
 
 func contains(s []string, e string) bool {

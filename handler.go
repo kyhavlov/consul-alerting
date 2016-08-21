@@ -21,19 +21,20 @@ type StdoutHandler struct {
 }
 
 func (s StdoutHandler) Alert(alert *AlertState) {
+	text := fmt.Sprintf("%s (%s)", alert.Message, alert.Details)
 	switch strings.ToLower(s.LogLevel) {
 	case "panic":
-		log.Panic(alert.Message)
+		log.Panic(text)
 	case "fatal":
-		log.Fatal(alert.Message)
+		log.Fatal(text)
 	case "error":
-		log.Error(alert.Message)
+		log.Error(text)
 	case "warn", "warning":
-		log.Warn(alert.Message)
+		log.Warn(text)
 	case "info":
-		log.Info(alert.Message)
+		log.Info(text)
 	case "debug":
-		log.Debug(alert.Message)
+		log.Debug(text)
 	}
 }
 
@@ -56,16 +57,8 @@ func (e EmailHandler) Alert(alert *AlertState) {
 		m.SetAddressHeader("From", "consul-alerting@noreply.com", "Consul Alerting")
 		m.SetAddressHeader("To", recipient, "")
 
-		if alert.Service == "" {
-			m.SetHeader("Subject", fmt.Sprintf("Node %s is now %s", alert.Node, alert.Status))
-		} else {
-			service := alert.Service
-			if alert.Tag != "" {
-				service = fmt.Sprintf("%s (%s)", service, alert.Tag)
-			}
-			m.SetHeader("Subject", fmt.Sprintf("Service %s is now %s", service, alert.Status))
-		}
-		m.SetBody("text/plain", alert.Message)
+		m.SetHeader("Subject", alert.Message)
+		m.SetBody("text/plain", alert.Details)
 
 		d := gomail.NewPlainDialer(records[0].Host, 25, "", "")
 
