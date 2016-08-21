@@ -19,7 +19,7 @@ type WatchOptions struct {
 	stopCh          chan struct{}
 }
 
-// Watches a service for changes in health
+// Watches a service for changes in health, updating the given handlers when an alert fires
 func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	// Set wait time to make the consul query block until an update happens
 	client := watchOpts.client
@@ -53,7 +53,7 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	apiLock, err := client.LockKey(lockPath)
 
 	if err != nil {
-		log.Fatalf("Error initializing lock for service %s%s", service, tagDisplay, err)
+		log.Fatalf("Error initializing lock for service %s%s %s", service, tagDisplay, err)
 	}
 
 	lock := LockHelper{

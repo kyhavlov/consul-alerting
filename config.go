@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/hcl"
 )
@@ -29,7 +32,16 @@ type HandlerConfig struct {
 	EmailHandler  `hcl:"email"`
 }
 
-func parse(raw string) (*Config, []AlertHandler, error) {
+// Reads the config file at the given path and returns a Config object and an array
+// of AlertHandlers
+func ParseConfig(path string) (*Config, []AlertHandler, error) {
+	// Read the file contents
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading config at %q: %s", path, err)
+	}
+	raw := string(bytes)
+
 	config := &Config{}
 
 	if err := hcl.Decode(&config, raw); err != nil {

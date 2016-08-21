@@ -1,5 +1,6 @@
-consul_address = "linux-server:8500"
+consul_address = "192.168.1.3:8500"
 dev_mode = true
+global_mode = false
 change_threshold = 30
 log_level = "info"
 
@@ -24,5 +25,9 @@ service "influx" {
 handlers {
   stdout {
     enabled = true
+  }
+  email {
+    enabled = false
+    recipients = ["admin@example.com"]
   }
 }

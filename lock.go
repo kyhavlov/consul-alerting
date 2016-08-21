@@ -26,7 +26,7 @@ func (l *LockHelper) start() {
 		case <-l.stopCh:
 			clean = true
 		default:
-			log.Info("Trying to acquire lock on ", l.target)
+			log.Infof("Waiting to acquire lock on %s...", l.target)
 			intChan, err := l.lock.Lock(l.lockCh)
 			if intChan != nil {
 				log.Infof("Acquired lock for %s alerts", l.target)

@@ -9,6 +9,12 @@
 			"revisionTime": "2016-07-16T02:56:31Z"
 		},
 		{
+			"checksumSHA1": "GX0szvZYEs4t4psFiucEU/Fnyg4=",
+			"path": "github.com/hashicorp/consul-template/test",
+			"revision": "f2aeb191d6e6bc4e5ed44a71f03bebb732231b94",
+			"revisionTime": "2016-08-11T22:30:48Z"
+		},
+		{
 			"checksumSHA1": "ZY6NCrR80zUmtOtPtKffbmFxRWw=",
 			"path": "github.com/hashicorp/consul/api",
 			"revision": "fce7d75609a04eeb9d4bf41c8dc592aac18fc97d",
@@ -111,5 +117,5 @@
 			"revisionTime": "2016-04-11T21:29:32Z"
 		}
 	],
-	"rootPath": "github.com/kyhavlov/consul-alerting"
+	"rootPath": "github.com/kyhavlov/consu"
 }

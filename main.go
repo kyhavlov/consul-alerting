@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,15 +19,9 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	// Load config
-	dat, err := ioutil.ReadFile("test.hcl")
+	config, handlers, err := ParseConfig("example.hcl")
 	if err != nil {
-		log.Errorf("Error loading config file: %v", err)
-	}
-
-	// Parse config
-	config, handlers, err := parse(string(dat))
-	if err != nil {
-		log.Errorf("Error parsing config file: %v", err)
+		log.Errorf("Error parsing config file: %s", err)
 	}
 
 	// Set log level
@@ -174,6 +167,7 @@ func shutdown(client *api.Client, config *Config, opts *ShutdownOpts) {
 		client.Agent().ServiceDeregister("nginx")
 	}
 
+	log.Info("Releasing locks...")
 	for i := 0; i < opts.count*2; i++ {
 		opts.stopCh <- struct{}{}
 	}
