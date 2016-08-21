@@ -63,7 +63,7 @@ The following options can be specified in a service block:
 | `ignored_tags`     | Tags to ignore when using `distinct_tags`. Useful when excluding generic tags like "master" that are spread across multiple clusters.
 
 #### Handler Options
-Handlers must have `enabled = true` set in order to be active.
+Handlers must have `enabled = true` in order to be active.
 
 **stdout**
 

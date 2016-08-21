@@ -10,6 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/consul/api"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
+	"time"
 )
 
 const usage =
@@ -55,7 +56,7 @@ func main() {
 	}
 	log.SetLevel(level)
 
-	// Configure Consul client
+	// Initialize Consul client
 	clientConfig := api.DefaultConfig()
 	clientConfig.Address = config.ConsulAddress
 
@@ -63,18 +64,44 @@ func main() {
 	if err != nil {
 		log.Fatal("Error initializing client: ", err)
 	}
+	for {
+		_, err = client.Status().Leader()
+		if err == nil {
+			break
+		}
+		log.Error("Error connecting to Consul: ", err)
+		log.Error("Retrying in 10s...")
+		time.Sleep(10 * time.Second)
+	}
 
 	if config.DevMode {
 		registerTestServices(client)
 	}
 
-	// Get services to watch
+	if config.GlobalMode {
+		log.Info("Running in global mode, monitoring all nodes/services")
+	} else {
+		log.Info("Running in local mode, monitoring local agent's nodes/services")
+	}
+
+	// Find services to watch
 	services := make(map[string][]string)
+	nodes := make([]string, 0)
 	if config.GlobalMode {
 		log.Info("Discovering services to watch from catalog")
 		services, _, err = client.Catalog().Services(&api.QueryOptions{})
 		if err != nil {
 			log.Fatal("Error initializing services: ", err)
+		}
+
+		log.Info("Discovering nodes to watch from catalog")
+		allNodes, _, err := client.Catalog().Nodes(&api.QueryOptions{})
+		if err == nil {
+			for _, node := range allNodes {
+				nodes = append(nodes, node.Node)
+			}
+		} else {
+			log.Errorf("Error getting nodes from catalog: %s", err)
 		}
 	} else {
 		log.Info("Discovering services to watch on local agent")
@@ -85,8 +112,15 @@ func main() {
 		for _, config := range serviceMap {
 			services[config.Service] = config.Tags
 		}
+
+		log.Info("Watching local node")
+		node, err := client.Agent().NodeName()
+		if err == nil {
+			nodes = append(nodes, node)
+		} else {
+			log.Errorf("Error getting local node name: %s", err)
+		}
 	}
-	log.Infof("Services: %v", services)
 
 	shutdownOpts := &ShutdownOpts{
 		stopCh: make(chan struct{}, 0),
@@ -94,6 +128,7 @@ func main() {
 
 	// Initialize service watches
 	for service, tags := range services {
+		log.Infof("Service found: %s, tags: %v", service, tags)
 		serviceConfig := config.getServiceConfig(service)
 
 		// Watch each tag separately if the flag is set
@@ -120,36 +155,19 @@ func main() {
 		}
 	}
 
-	// Get nodes to watch
-	nodes := make([]string, 0)
-	if config.GlobalMode {
-		log.Info("Discovering nodes to watch from catalog")
-		allNodes, _, err := client.Catalog().Nodes(&api.QueryOptions{})
-		if err == nil {
-			for _, node := range allNodes {
-				nodes = append(nodes, node.Node)
-			}
-		} else {
-			log.Errorf("Error getting nodes from catalog: %s", err)
-		}
-	} else {
-		log.Info("Watching local node")
-		node, err := client.Agent().NodeName()
-		if err == nil {
-			nodes = append(nodes, node)
-		} else {
-			log.Errorf("Error getting local node name: %s", err)
-		}
-	}
-	log.Infof("Nodes: %v", nodes)
-
 	// Initialize node watches
+	log.Infof("Nodes found: %v", nodes)
 	for _, node := range nodes {
-		go WatchNode(node, &WatchOptions{
+		opts := &WatchOptions{
 			changeThreshold: config.ChangeThreshold,
 			client:          client,
 			handlers:        handlers,
-		})
+		}
+		if config.GlobalMode {
+			opts.stopCh = shutdownOpts.stopCh
+			shutdownOpts.count++
+		}
+		go WatchNode(node, opts)
 	}
 
 	// Set up signal handling for graceful shutdown
@@ -174,6 +192,7 @@ func main() {
 	}
 }
 
+// Used to shutdown gracefully by releasing any held locks
 type ShutdownOpts struct {
 	stopCh chan struct{}
 	count  int

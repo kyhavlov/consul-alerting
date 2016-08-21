@@ -24,6 +24,7 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	// Set wait time to make the consul query block until an update happens
 	client := watchOpts.client
 	queryOpts := &api.QueryOptions{
+		AllowStale: true,
 		WaitTime: watchWaitTime,
 	}
 
@@ -53,11 +54,11 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	apiLock, err := client.LockKey(lockPath)
 
 	if err != nil {
-		log.Fatalf("Error initializing lock for service %s%s %s", service, tagDisplay, err)
+		log.Fatalf("Error initializing lock for service %s%s: %s", service, tagDisplay, err)
 	}
 
 	lock := LockHelper{
-		target: service + tagDisplay,
+		target: "service " + service + tagDisplay,
 		path:   lockPath,
 		client: client,
 		lock:   apiLock,
@@ -69,6 +70,7 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 	log.Debugf("Initialized watch for service: %s%s", service, tagDisplay)
 
 	for {
+		// Check for shutdown event
 		select {
 		case <-watchOpts.stopCh:
 			log.Infof("Shutting down watch for service %s%s", service, tagDisplay)
@@ -78,6 +80,7 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 		default:
 		}
 
+		// Sleep if we don't hold the lock
 		if !lock.acquired {
 			time.Sleep(1 * time.Second)
 			continue
@@ -123,13 +126,14 @@ func WatchService(service string, tag string, watchOpts *WatchOptions) {
 func WatchNode(node string, watchOpts *WatchOptions) {
 	// Set the options for the watch query
 	queryOpts := &api.QueryOptions{
+		AllowStale: true,
 		WaitTime: watchWaitTime,
 	}
 
 	client := watchOpts.client
-
+	keyPath := "service/consul-alerting/node/"+node+"/"
 	lastCheckStatus := make(map[string]string)
-	storedAlertStates, err := getAlertStates("service/consul-alerting/node/"+node+"/", client)
+	storedAlertStates, err := getAlertStates(keyPath, client)
 
 	if err != nil {
 		log.Error("Error loading previous alert states from consul: ", err)
@@ -139,9 +143,51 @@ func WatchNode(node string, watchOpts *WatchOptions) {
 		lastCheckStatus[checkName] = alertState.Status
 	}
 
+	// If we're in global mode, we need a lock to watch this node because we may
+	// not be the only one trying to do so
+	globalMode := watchOpts.stopCh != nil
+	var lock LockHelper
+	if globalMode {
+		// Set up the lock this thread will use to determine leader status
+		lockPath := keyPath + "leader"
+		apiLock, err := client.LockKey(lockPath)
+
+		if err != nil {
+			log.Fatalf("Error initializing lock for node %s: %s", node, err)
+		}
+
+		lock = LockHelper{
+			target: "node " + node,
+			path:   lockPath,
+			client: client,
+			lock:   apiLock,
+			stopCh: make(chan struct{}, 1),
+			lockCh: make(chan struct{}, 1),
+		}
+		go lock.start()
+	}
+
 	log.Debugf("Initialized watch for node: %s", node)
 
 	for {
+		if globalMode {
+			// Check for shutdown event
+			select {
+			case <-watchOpts.stopCh:
+				log.Infof("Shutting down watch for node %s", node)
+				lock.stop()
+				<-watchOpts.stopCh
+				break
+			default:
+			}
+
+			// Sleep if we don't hold the lock
+			if !lock.acquired {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		}
+
 		// Do a blocking query (a consul watch) for the health of the node
 		checks, queryMeta, err := client.Health().Node(node, queryOpts)
 
@@ -218,7 +264,7 @@ func processUpdate(update CheckUpdate, watchOpts *WatchOptions) {
 		log.Errorf("Error storing state for alert in Consul: %s", err)
 	}
 
-	go attemptAlert(int64(watchOpts.changeThreshold), kvPath, watchOpts.client, watchOpts.handlers)
+	go attemptAlert(watchOpts.changeThreshold, kvPath, watchOpts.client, watchOpts.handlers)
 }
 
 func contains(s []string, e string) bool {

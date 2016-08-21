@@ -15,7 +15,7 @@ type AlertState struct {
 	Status      string `json:"status"`
 	Node        string `json:"node"`
 	Service     string `json:"service"`
-	Tag         string ``
+	Tag         string `json:"tag"`
 	LastUpdated int64  `json:"last_updated"`
 	Message     string `json:"message"`
 }
@@ -48,6 +48,7 @@ func getAlertStates(kvPath string, client *api.Client) (map[string]*AlertState, 
 	return alertStates, nil
 }
 
+// Parses an AlertState from a given Consul K/V path
 func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 	kvPair, _, err := client.KV().Get(kvPath, nil)
 	alert := &AlertState{}
@@ -75,7 +76,8 @@ func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 	return alert, nil
 }
 
-func attemptAlert(changeThreshold int64, kvPath string, client *api.Client, handlers []AlertHandler) {
+// Sleeps for changeThreshold duration, then alerts if the state has not changed
+func attemptAlert(changeThreshold int, kvPath string, client *api.Client, handlers []AlertHandler) {
 	time.Sleep(time.Duration(changeThreshold) * time.Second)
 
 	alertState, err := getAlertState(kvPath, client)
@@ -85,7 +87,7 @@ func attemptAlert(changeThreshold int64, kvPath string, client *api.Client, hand
 		return
 	}
 
-	if time.Now().Unix()-changeThreshold >= alertState.LastUpdated {
+	if time.Now().Unix()-int64(changeThreshold) >= alertState.LastUpdated {
 		alertState.Message = alertState.Message + fmt.Sprintf(" for %d seconds", changeThreshold)
 		for _, handler := range handlers {
 			handler.Alert(alertState)
