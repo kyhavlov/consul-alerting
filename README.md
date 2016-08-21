@@ -3,6 +3,14 @@ Consul Alerting
 
 This project provides a daemon to run alongside the local Consul agent and alert on health check failures. It can be run in local mode, where it will only monitor services and checks on the local agent, or global mode, where it will alert for all nodes/services in the catalog. It distributes the alerting load by acquiring individual locks on the nodes/services it is monitoring, allowing daemons on different nodes to share the watches.
 
+Usage
+-----
+
+### Command Line
+To run the daemon, pass the `-config` flag for the config file location.
+
+`consul-alerting [--help] -config=/path/to/config.hcl`
+
 ### Configuration File(s)
 The Consul Alerting configuration files are written in [HashiCorp Configuration Language (HCL)][HCL]. By proxy, this means the Consul Alerting configuration file is JSON-compatible. For more information, please see the [HCL specification][HCL].
 
@@ -19,17 +27,9 @@ service "redis" {
   distinct_tags = true
 }
 
-service "nginx" {
-  change_threshold = 5
-}
-
 service "elasticsearch" {
   distinct_tags = true
   ignored_tags = ["master", "client"]
-}
-
-service "influx" {
-  distinct_tags = true
 }
 
 handlers {

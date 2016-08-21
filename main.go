@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,14 @@ import (
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
+const usage =
+`Usage: consul-alerting [--help] -config=/path/to/config.hcl
+
+Options:
+
+    -config=<path>    Sets the path to a configuration file on disk.
+`
+
 func main() {
 	// Set up logging
 	formatter := new(prefixed.TextFormatter)
@@ -19,10 +28,17 @@ func main() {
 	log.SetFormatter(formatter)
 	log.SetLevel(log.DebugLevel)
 
-	// Get command line options
+	// Parse command line options
 	var config_path string
+	var help bool
 	flag.StringVar(&config_path, "config", "", "")
+	flag.BoolVar(&help, "help", false, "")
 	flag.Parse()
+
+	if help || config_path == "" {
+		fmt.Print(usage)
+		os.Exit(0)
+	}
 
 	// Load config
 	config, handlers, err := ParseConfig(config_path)
