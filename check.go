@@ -84,7 +84,7 @@ func updateCheckState(update CheckUpdate, client *api.Client) bool {
 		if update.ServiceTag != "" {
 			tagPath = fmt.Sprintf("%s/", update.ServiceTag)
 		}
-		kvPath = kvPath + fmt.Sprintf("/service/%s/%s%s/%s", check.ServiceID, tagPath, check.Node, check.CheckID)
+		kvPath = kvPath + fmt.Sprintf("/service/%s/%s%s/%s", check.ServiceName, tagPath, check.Node, check.CheckID)
 	} else {
 		kvPath = kvPath + fmt.Sprintf("/node/%s/%s", check.Node, check.CheckID)
 	}

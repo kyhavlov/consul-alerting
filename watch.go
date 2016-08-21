@@ -183,7 +183,7 @@ func watch(opts *WatchOptions) {
 			if mode == NodeWatch {
 				failingChecks := make([]string, 0)
 				for _, check := range checks {
-					if check.ServiceName == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+					if check.ServiceID == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
 						failingChecks = append(failingChecks, check.Name)
 					}
 				}
