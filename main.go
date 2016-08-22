@@ -133,7 +133,7 @@ func registerTestServices(client *api.Client) {
 		Name: "memory usage",
 		AgentServiceCheck: api.AgentServiceCheck{
 			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "20s",
+			Interval: "10s",
 		},
 	})
 

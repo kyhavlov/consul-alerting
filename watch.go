@@ -173,7 +173,7 @@ func watch(opts *WatchOptions) {
 
 			// Try to write the health updates to consul
 			for _, update := range updates {
-				log.Debugf("Updating health check '%s' (%s) for %s", update.HealthCheck.Name, update.Status, name)
+				log.Debugf("Got health check update for '%s' (%s) for %s", update.HealthCheck.Name, update.Status, name)
 				if !updateCheckState(update, client) {
 					success = false
 				}
@@ -183,7 +183,7 @@ func watch(opts *WatchOptions) {
 			if mode == NodeWatch {
 				failingChecks := make([]string, 0)
 				for _, check := range checks {
-					if check.ServiceID == "" && check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+					if check.ServiceID == "" && (check.Status == api.HealthCritical || check.Status == api.HealthWarning) {
 						failingChecks = append(failingChecks, check.Name)
 					}
 				}

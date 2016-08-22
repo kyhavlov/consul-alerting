@@ -37,7 +37,7 @@ func getCheckStates(kvPath string, client *api.Client) (map[string]*CheckState, 
 
 		keyName := strings.Split(path, "/")
 		if keyName[len(keyName)-1] != "alert" && keyName[len(keyName)-1] != "leader" {
-			checkName := keyName[len(keyName) - 2] + "/" + keyName[len(keyName) - 1]
+			checkName := keyName[len(keyName)-2] + "/" + keyName[len(keyName)-1]
 			checkStates[checkName] = checkState
 		}
 	}
