@@ -16,7 +16,7 @@ vet:
 	@go vet
 
 test: fmt vet
-	@go test
+	@go test -v
 
 bootstrap:
 	@for tool in  $(EXTERNAL_TOOLS) ; do \

@@ -15,7 +15,7 @@ type WatchOptions struct {
 	node            string
 	service         string
 	tag             string
-	changeThreshold int
+	changeThreshold time.Duration
 	diffCheckFunc   func(checks []*api.HealthCheck, lastStatus map[string]string, opts *WatchOptions) map[string]CheckUpdate
 	client          *api.Client
 	handlers        []AlertHandler
@@ -76,14 +76,17 @@ func watch(opts *WatchOptions) {
 
 	// Load previously stored check states for this watch from consul
 	lastCheckStatus := make(map[string]string)
+
+	// Set the default alert state in case there's no pre-existing state
 	alertState := &AlertState{
+		Status:  api.HealthPassing,
 		Node:    opts.node,
 		Service: opts.service,
 		Tag:     opts.tag,
 	}
 
 	// Set up a callback to be run when we acquire the lock/gain leadership so we can
-	// grab the last check/alert states
+	// load the last check/alert states
 	loadCheckStates := func() {
 		storedCheckStates, err := getCheckStates(keyPath, client)
 
@@ -147,6 +150,7 @@ func watch(opts *WatchOptions) {
 		var checks []*api.HealthCheck
 		var queryMeta *api.QueryMeta
 		var err error
+
 		// Do a blocking query (a consul watch) for the health checks
 		if mode == NodeWatch {
 			checks, queryMeta, err = client.Health().Node(opts.node, queryOpts)
@@ -154,6 +158,7 @@ func watch(opts *WatchOptions) {
 			checks, queryMeta, err = client.Health().Checks(opts.service, queryOpts)
 		}
 
+		// Try again in 10s if we got an error during the blocking request
 		if err != nil {
 			log.Errorf("Error trying to watch %s: %s, retrying in 10s...", mode, err)
 			time.Sleep(errorWaitTime)
@@ -337,7 +342,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 						watchOpts := &WatchOptions{
 							service:         service,
 							tag:             tag,
-							changeThreshold: changeThreshold,
+							changeThreshold: time.Duration(changeThreshold),
 							diffCheckFunc:   diffServiceChecks,
 							client:          client,
 							handlers:        handlers,
@@ -350,7 +355,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 					// If it isn't, just start one watch for the service
 					watchOpts := &WatchOptions{
 						service:         service,
-						changeThreshold: changeThreshold,
+						changeThreshold: time.Duration(changeThreshold),
 						diffCheckFunc:   diffServiceChecks,
 						client:          client,
 						handlers:        handlers,
@@ -369,7 +374,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 							go watch(&WatchOptions{
 								service:         service,
 								tag:             tag,
-								changeThreshold: changeThreshold,
+								changeThreshold: time.Duration(changeThreshold),
 								diffCheckFunc:   diffServiceChecks,
 								client:          client,
 								handlers:        handlers,
@@ -412,7 +417,7 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 				log.Infof("Discovered new node: %s", nodeName)
 				opts := &WatchOptions{
 					node:            nodeName,
-					changeThreshold: config.ChangeThreshold,
+					changeThreshold: time.Duration(config.ChangeThreshold),
 					diffCheckFunc:   diffNodeChecks,
 					client:          client,
 					handlers:        handlers,
@@ -442,7 +447,7 @@ func initializeWatches(nodeName string, config *Config, handlers []AlertHandler,
 		// We don't need to discover the local node, it won't change
 		opts := &WatchOptions{
 			node:            nodeName,
-			changeThreshold: config.ChangeThreshold,
+			changeThreshold: time.Duration(config.ChangeThreshold),
 			diffCheckFunc:   diffNodeChecks,
 			client:          client,
 			handlers:        handlers,
