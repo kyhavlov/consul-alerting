@@ -1,5 +1,6 @@
 Consul Alerting
 ================
+[![Build Status](https://travis-ci.org/kyhavlov/consul-alerting.svg?branch=master)](https://travis-ci.org/kyhavlov/consul-alerting)
 
 This project provides a daemon to run alongside the local Consul agent and alert on health check failures. It can be run in local mode, where it will only monitor services and checks on the local agent, or global mode, where it will alert for all nodes/services in the catalog. It distributes the alerting load by acquiring individual locks on the nodes/services it is monitoring, allowing daemons on different nodes to share the watches.
 
