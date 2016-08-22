@@ -6,12 +6,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/hashicorp/consul-template/test"
 )
 
-func TestParseConfig_missingFile(t *testing.T) {
-	_, _, err := ParseConfig(path.Join(os.TempDir(), "nonexistant.json"))
+func TestConfig_missingFile(t *testing.T) {
+	_, _, err := ParseConfigFile(path.Join(os.TempDir(), "nonexistant.json"))
 	if err == nil {
 		t.Fatal("expected error, but nothing was returned")
 	}
@@ -23,8 +21,9 @@ func TestParseConfig_missingFile(t *testing.T) {
 }
 
 func TestParseConfig_correctValues(t *testing.T) {
-	configFile := test.CreateTempfile([]byte(`
+	configString := `
 	consul_address = "localhost:8500"
+	token = "test_token"
 	global_mode = true
 	change_threshold = 30
 	log_level = "warn"
@@ -45,16 +44,16 @@ func TestParseConfig_correctValues(t *testing.T) {
 			recipients = ["admin@example.com"]
 		}
 	}
-	`), t)
-	defer test.DeleteTempfile(configFile, t)
+	`
 
-	config, handlers, err := ParseConfig(configFile.Name())
+	config, handlers, err := ParseConfig(configString)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected := &Config{
 		ConsulAddress:   "localhost:8500",
+		ConsulToken:     "test_token",
 		GlobalMode:      true,
 		ChangeThreshold: 30,
 		LogLevel:        "warn",

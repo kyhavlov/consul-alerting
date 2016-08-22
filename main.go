@@ -6,14 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/consul/api"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
-	"time"
 )
 
-const usage = `Usage: consul-alerting [--help] -config=/path/to/config.hcl
+const usage = `Usage: consul-alerting [--help] [options]
 
 Options:
 
@@ -35,16 +35,20 @@ func main() {
 	flag.BoolVar(&help, "help", false, "")
 	flag.Parse()
 
-	if help || config_path == "" {
+	if help {
 		fmt.Print(usage)
 		os.Exit(0)
 	}
 
-	// Load config
-	config, handlers, err := ParseConfig(config_path)
-	if err != nil {
-		log.Error(err)
-		os.Exit(2)
+	// Load the configuration
+	config, handlers, err := ParseConfig("{}")
+
+	if config_path != "" {
+		config, handlers, err = ParseConfigFile(config_path)
+		if err != nil {
+			log.Fatal(err)
+			os.Exit(2)
+		}
 	}
 
 	// Set log level
@@ -58,7 +62,9 @@ func main() {
 	// Initialize Consul client
 	clientConfig := api.DefaultConfig()
 	clientConfig.Address = config.ConsulAddress
+	clientConfig.Token = config.ConsulToken
 
+	log.Infof("Using Consul agent at %s", clientConfig.Address)
 	client, err := api.NewClient(clientConfig)
 	if err != nil {
 		log.Fatal("Error initializing client: ", err)

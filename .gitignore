@@ -2,5 +2,6 @@
 bin/
 pkg/
 *.hcl
+*.nomad
 
 consul-alerting

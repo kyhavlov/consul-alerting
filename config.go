@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	ConsulAddress   string `hcl:"consul_address"`
+	ConsulToken     string `hcl:"token"`
 	DevMode         bool   `hcl:"dev_mode"`
 	GlobalMode      bool   `hcl:"global_mode"`
 	ChangeThreshold int    `hcl:"change_threshold"`
@@ -32,9 +33,9 @@ type HandlerConfig struct {
 	EmailHandler  `hcl:"email"`
 }
 
-// Reads the config file at the given path and returns a Config object and an array
+// Parses a given file path for config and returns a Config object and an array
 // of AlertHandlers
-func ParseConfig(path string) (*Config, []AlertHandler, error) {
+func ParseConfigFile(path string) (*Config, []AlertHandler, error) {
 	// Read the file contents
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -42,6 +43,12 @@ func ParseConfig(path string) (*Config, []AlertHandler, error) {
 	}
 	raw := string(bytes)
 
+	return ParseConfig(raw)
+}
+
+// Parses the given config string and returns a Config object and an array
+// of AlertHandlers
+func ParseConfig(raw string) (*Config, []AlertHandler, error) {
 	config := &Config{}
 
 	if err := hcl.Decode(&config, raw); err != nil {
@@ -75,7 +82,7 @@ func ParseConfig(path string) (*Config, []AlertHandler, error) {
 		if config.Handlers.StdoutHandler.LogLevel == "" {
 			config.Handlers.StdoutHandler.LogLevel = "warn"
 		}
-		_, err = log.ParseLevel(config.Handlers.StdoutHandler.LogLevel)
+		_, err := log.ParseLevel(config.Handlers.StdoutHandler.LogLevel)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Error parsing loglevel %s: %s", config.Handlers.StdoutHandler.LogLevel, err)
 		}

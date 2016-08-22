@@ -16,3 +16,6 @@ before_script: |-
   mv consul ~/bin/
 
 script: make test
+
+notifications:
+  email: false

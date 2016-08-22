@@ -8,7 +8,7 @@ Usage
 -----
 
 ### Command Line
-To run the daemon, pass the `-config` flag for the config file location.
+To run the daemon, pass the `-config` flag for the config file location. If a config file is not specified, the default configuration settings will be used and alerts will be logged on the `stdout` handler.
 
 `consul-alerting [--help] -config=/path/to/config.hcl`
 
@@ -50,6 +50,7 @@ handlers {
 |       Option       | Description |
 | ------------------ |------------ |
 | `consul_address`   | The address of the consul agent to connect to. Defaults to `localhost:8500`.
+| `token`            | The [Consul API token][Consul ACLs]. There is no default value.
 | `global_mode`      | Use the catalog to discover services/nodes instead of the local agent. Defaults to false.
 | `change_threshold` | The time (in seconds) that a check must be in a failing state before alerting. Defaults to 60.
 | `log_level`        | The logging level to use. Defaults to `info`.
@@ -102,3 +103,4 @@ Handlers must have `enabled = true` in order to be active.
 ```
 
 [HCL]: https://github.com/hashicorp/hcl "HashiCorp Configuration Language (HCL)"
+[Consul ACLs]: https://www.consul.io/docs/internals/acl.html "Consul ACLs"
