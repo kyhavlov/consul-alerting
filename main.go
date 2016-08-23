@@ -88,7 +88,25 @@ func main() {
 		stopCh: make(chan struct{}, 0),
 	}
 
-	initializeWatches(nodeName, config, handlers, shutdownOpts, client)
+	go discoverServices(nodeName, config, handlers, shutdownOpts, client)
+
+	// If NodeWatch is set to global mode, monitor the catalog for new nodes
+	if config.NodeWatch == GlobalMode {
+		log.Info("Discovering nodes from catalog")
+		go discoverNodes(config, handlers, shutdownOpts, client)
+	} else {
+		log.Infof("Monitoring local node (%s)'s checks", nodeName)
+		// We're in local mode so we don't need to discover the local node; it won't change
+		opts := &WatchOptions{
+			node:            nodeName,
+			changeThreshold: time.Duration(config.ChangeThreshold),
+			client:          client,
+			handlers:        handlers,
+			stopCh:          shutdownOpts.stopCh,
+		}
+		shutdownOpts.count++
+		go watch(opts)
+	}
 
 	// Set up signal handling for graceful shutdown
 	c := make(chan os.Signal, 1)

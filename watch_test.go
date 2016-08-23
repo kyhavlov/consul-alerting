@@ -47,9 +47,8 @@ func TestWatch_alertService(t *testing.T) {
 	alertCh := make(chan *AlertState)
 
 	go watch(&WatchOptions{
-		service:       testServiceName,
-		diffCheckFunc: diffServiceChecks,
-		client:        client,
+		service: testServiceName,
+		client:  client,
 		handlers: []AlertHandler{
 			testHandler{alertCh},
 		},
@@ -93,9 +92,8 @@ func TestWatch_alertNode(t *testing.T) {
 	alertCh := make(chan *AlertState)
 
 	go watch(&WatchOptions{
-		node:          server.Config.NodeName,
-		diffCheckFunc: diffServiceChecks,
-		client:        client,
+		node:   server.Config.NodeName,
+		client: client,
 		handlers: []AlertHandler{
 			testHandler{alertCh},
 		},
@@ -143,7 +141,6 @@ func TestWatch_changeThreshold(t *testing.T) {
 	go watch(&WatchOptions{
 		service:         testServiceName,
 		changeThreshold: changeThreshold,
-		diffCheckFunc:   diffServiceChecks,
 		client:          client,
 		handlers: []AlertHandler{
 			testHandler{alertCh},
@@ -168,5 +165,60 @@ func TestWatch_changeThreshold(t *testing.T) {
 
 	// If we got nothing after changeThreshold seconds, success
 	case <-time.After(changeThreshold):
+	}
+}
+
+// Test that we only get one alert even with multiple watches going
+func TestWatch_multipleWatch(t *testing.T) {
+	client, server := testConsul(t)
+	defer server.Stop()
+
+	// Add a service with passing health
+	server.AddService(testServiceName, structs.HealthPassing, nil)
+
+	alertCh := make(chan *AlertState, 2)
+
+	opts := &WatchOptions{
+		service: testServiceName,
+		client:  client,
+		handlers: []AlertHandler{
+			testHandler{alertCh},
+		},
+	}
+
+	go watch(opts)
+	go watch(opts)
+	<-time.After(1 * time.Second)
+
+	// Change service health to critical
+	server.AddService(testServiceName, structs.HealthCritical, nil)
+
+	select {
+	case alert := <-alertCh:
+		if alert.Status != structs.HealthCritical {
+			t.Fatalf("expected alert on status %s, got %s", structs.HealthCritical, alert.Status)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("didn't get alert within the timeout")
+	}
+
+	// Set service back to passing health
+	server.AddService(testServiceName, structs.HealthPassing, nil)
+
+	// Make sure the next alert we get is for passing health on the service
+	select {
+	case alert := <-alertCh:
+		if alert.Status != structs.HealthPassing {
+			t.Fatalf("expected alert on status %s, got %s", structs.HealthPassing, alert.Status)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("didn't get alert within the timeout")
+	}
+
+	// Make sure we don't have any more alerts
+	select {
+	case alert := <-alertCh:
+		t.Fatalf("got unexpected extra alert: %v", alert)
+	default:
 	}
 }

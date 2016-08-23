@@ -73,6 +73,11 @@ func getCheckState(kvPath string, client *api.Client) (*CheckState, error) {
 	return check, nil
 }
 
+type CheckUpdate struct {
+	ServiceTag string
+	*api.HealthCheck
+}
+
 // Updates the last known state of a check in Consul. Returns true if succeeded.
 func updateCheckState(update CheckUpdate, client *api.Client) bool {
 	check := update.HealthCheck
