@@ -24,7 +24,8 @@ func TestParseConfig_correctValues(t *testing.T) {
 	configString := `
 	consul_address = "localhost:8500"
 	token = "test_token"
-	global_mode = true
+	node_watch = "local"
+	service_watch = "global"
 	change_threshold = 30
 	log_level = "warn"
 
@@ -54,7 +55,8 @@ func TestParseConfig_correctValues(t *testing.T) {
 	expected := &Config{
 		ConsulAddress:   "localhost:8500",
 		ConsulToken:     "test_token",
-		GlobalMode:      true,
+		NodeWatch:       "local",
+		ServiceWatch:    "global",
 		ChangeThreshold: 30,
 		LogLevel:        "warn",
 		Services: []ServiceConfig{

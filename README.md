@@ -19,7 +19,8 @@ The Consul Alerting configuration files are written in [HashiCorp Configuration 
 ```hcl
 consul_address = "localhost:8500"
 
-global_mode = true
+node_watch = "local"
+service_watch = "global"
 change_threshold = 30
 log_level = "info"
 
@@ -51,7 +52,8 @@ handlers {
 | ------------------ |------------ |
 | `consul_address`   | The address of the consul agent to connect to. Defaults to `localhost:8500`.
 | `token`            | The [Consul API token][Consul ACLs]. There is no default value.
-| `global_mode`      | Use the catalog to discover services/nodes instead of the local agent. Defaults to false.
+| `node_watch`       | The setting to use for discovering nodes. If set to `local`, only the local node's health will be watched. If set to `global`, all nodes in the catalog will be watched. Defaults to `local`.
+| `service_watch`    | The setting to use for discovering services. If set to `local`, only services on the local node will be watch. If set to `global`, all services in the catalog will be watched. Defaults to `local`.
 | `change_threshold` | The time (in seconds) that a check must be in a failing state before alerting. Defaults to 60.
 | `log_level`        | The logging level to use. Defaults to `info`.
 
@@ -62,7 +64,7 @@ The following options can be specified in a service block:
 | ------------------ |------------ |
 | `change_threshold` | The time (in seconds) that this service must be in a failing state before alerting. Defaults to the global `change_threshold`.
 | `distinct_tags`    | Treat every tag registered as a distinct service, and specify the tag when sending alerts about the failing service. Defaults to false.
-| `ignored_tags`     | Tags to ignore when using `distinct_tags`. Useful when excluding generic tags like "master" that are spread across multiple clusters.
+| `ignored_tags`     | Tags to ignore when using `distinct_tags`. Useful when excluding generic tags like "master" that are spread across multiple clusters of the same service.
 
 #### Handler Options
 Handlers must have `enabled = true` in order to be active.

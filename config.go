@@ -8,11 +8,15 @@ import (
 	"github.com/hashicorp/hcl"
 )
 
+const LocalMode = "local"
+const GlobalMode = "global"
+
 type Config struct {
 	ConsulAddress   string `hcl:"consul_address"`
 	ConsulToken     string `hcl:"token"`
 	DevMode         bool   `hcl:"dev_mode"`
-	GlobalMode      bool   `hcl:"global_mode"`
+	NodeWatch       string `hcl:"node_watch"`
+	ServiceWatch    string `hcl:"service_watch"`
 	ChangeThreshold int    `hcl:"change_threshold"`
 
 	LogLevel string `hcl:"log_level"`
@@ -66,6 +70,20 @@ func ParseConfig(raw string) (*Config, []AlertHandler, error) {
 
 	if config.LogLevel == "" {
 		config.LogLevel = "INFO"
+	}
+
+	validWatchModes := []string{LocalMode, GlobalMode}
+
+	if config.NodeWatch == "" {
+		config.NodeWatch = "local"
+	} else if !contains(validWatchModes, config.NodeWatch) {
+		return nil, nil, fmt.Errorf("Unrecognized node_watch setting: %s", config.NodeWatch)
+	}
+
+	if config.ServiceWatch == "" {
+		config.ServiceWatch = "local"
+	} else if !contains(validWatchModes, config.ServiceWatch) {
+		return nil, nil, fmt.Errorf("Unrecognized service_watch setting: %s", config.ServiceWatch)
 	}
 
 	// Set default service config

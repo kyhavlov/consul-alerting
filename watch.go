@@ -296,7 +296,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 		var err error
 
 		// Watch either all services or just the local node's, depending on whether GlobalMode is set
-		if config.GlobalMode {
+		if config.ServiceWatch == GlobalMode {
 			currentServices, queryMeta, err = client.Catalog().Services(queryOpts)
 		} else {
 			var node *api.CatalogNode
@@ -421,11 +421,9 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 					diffCheckFunc:   diffNodeChecks,
 					client:          client,
 					handlers:        handlers,
+					stopCh:          shutdownOpts.stopCh,
 				}
-				if config.GlobalMode {
-					opts.stopCh = shutdownOpts.stopCh
-					shutdownOpts.count++
-				}
+				shutdownOpts.count++
 				nodes = append(nodes, nodeName)
 				go watch(opts)
 			}
@@ -435,16 +433,13 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 
 // Starts the discovery of nodes/services, depending on how GlobalMode is set
 func initializeWatches(nodeName string, config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+	go discoverServices(nodeName, config, handlers, shutdownOpts, client)
 
-	if config.GlobalMode {
-		log.Info("Running in global mode, monitoring all nodes/services")
-		go discoverServices(nodeName, config, handlers, shutdownOpts, client)
+	// If NodeWatch is set to global mode, monitor the catalog for new nodes
+	if config.NodeWatch == GlobalMode {
 		go discoverNodes(config, handlers, shutdownOpts, client)
 	} else {
-		log.Infof("Running in local mode, monitoring node %s's services", nodeName)
-		go discoverServices(nodeName, config, handlers, shutdownOpts, client)
-
-		// We don't need to discover the local node, it won't change
+		// We're in local mode so we don't need to discover the local node; it won't change
 		opts := &WatchOptions{
 			node:            nodeName,
 			changeThreshold: time.Duration(config.ChangeThreshold),

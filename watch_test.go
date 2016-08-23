@@ -21,22 +21,28 @@ func (t testHandler) Alert(alert *AlertState) {
 	t.alerts <- alert
 }
 
-// The basic flow of a service becoming unhealthy and then recovering
-func TestWatch_alertService(t *testing.T) {
-	// Create a test Consul server
-	srv1 := testutil.NewTestServer(t)
-	defer srv1.Stop()
+// Create a test Consul server and a client for making calls to it
+func testConsul(t *testing.T) (*api.Client, *testutil.TestServer) {
+	server := testutil.NewTestServer(t)
 
 	config := api.DefaultConfig()
-	config.Address = srv1.HTTPAddr
+	config.Address = server.HTTPAddr
 	client, err := api.NewClient(config)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	return client, server
+}
+
+// The basic flow of a service becoming unhealthy and then recovering
+func TestWatch_alertService(t *testing.T) {
+	client, server := testConsul(t)
+	defer server.Stop()
+
 	// Add a service with passing health
-	srv1.AddService(testServiceName, structs.HealthPassing, nil)
+	server.AddService(testServiceName, structs.HealthPassing, nil)
 
 	alertCh := make(chan *AlertState)
 
@@ -52,7 +58,7 @@ func TestWatch_alertService(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	// Change service health to critical
-	srv1.AddService(testServiceName, structs.HealthCritical, nil)
+	server.AddService(testServiceName, structs.HealthCritical, nil)
 
 	select {
 	case alert := <-alertCh:
@@ -64,7 +70,7 @@ func TestWatch_alertService(t *testing.T) {
 	}
 
 	// Set service back to passing health
-	srv1.AddService(testServiceName, structs.HealthPassing, nil)
+	server.AddService(testServiceName, structs.HealthPassing, nil)
 
 	select {
 	case alert := <-alertCh:
@@ -78,25 +84,16 @@ func TestWatch_alertService(t *testing.T) {
 
 // The basic flow of a node becoming unhealthy and then recovering
 func TestWatch_alertNode(t *testing.T) {
-	// Create a test Consul server
-	srv1 := testutil.NewTestServer(t)
-	defer srv1.Stop()
-
-	config := api.DefaultConfig()
-	config.Address = srv1.HTTPAddr
-	client, err := api.NewClient(config)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	client, server := testConsul(t)
+	defer server.Stop()
 
 	// Create a node check
-	srv1.AddCheck(testNodeCheckName, "", structs.HealthPassing)
+	server.AddCheck(testNodeCheckName, "", structs.HealthPassing)
 
 	alertCh := make(chan *AlertState)
 
 	go watch(&WatchOptions{
-		node:          srv1.Config.NodeName,
+		node:          server.Config.NodeName,
 		diffCheckFunc: diffServiceChecks,
 		client:        client,
 		handlers: []AlertHandler{
@@ -107,7 +104,7 @@ func TestWatch_alertNode(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	// Change check health to critical
-	srv1.AddCheck(testNodeCheckName, "", structs.HealthCritical)
+	server.AddCheck(testNodeCheckName, "", structs.HealthCritical)
 
 	select {
 	case alert := <-alertCh:
@@ -119,7 +116,7 @@ func TestWatch_alertNode(t *testing.T) {
 	}
 
 	// Set check back to passing
-	srv1.AddCheck(testNodeCheckName, "", structs.HealthPassing)
+	server.AddCheck(testNodeCheckName, "", structs.HealthPassing)
 
 	select {
 	case alert := <-alertCh:
@@ -133,20 +130,11 @@ func TestWatch_alertNode(t *testing.T) {
 
 // Test that we don't alert if the status isn't stable throughout the changeThreshold
 func TestWatch_changeThreshold(t *testing.T) {
-	// Create a test Consul server
-	srv1 := testutil.NewTestServer(t)
-	defer srv1.Stop()
-
-	config := api.DefaultConfig()
-	config.Address = srv1.HTTPAddr
-	client, err := api.NewClient(config)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	client, server := testConsul(t)
+	defer server.Stop()
 
 	// Add a service with passing health
-	srv1.AddService(testServiceName, structs.HealthPassing, nil)
+	server.AddService(testServiceName, structs.HealthPassing, nil)
 
 	alertCh := make(chan *AlertState)
 
@@ -165,12 +153,12 @@ func TestWatch_changeThreshold(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	// Change service health to critical
-	srv1.AddService(testServiceName, structs.HealthCritical, nil)
+	server.AddService(testServiceName, structs.HealthCritical, nil)
 
 	<-time.After(1 * time.Second)
 
 	// Change service health back to passing so we never get an alert
-	srv1.AddService(testServiceName, structs.HealthPassing, nil)
+	server.AddService(testServiceName, structs.HealthPassing, nil)
 
 	<-time.After(1 * time.Second)
 
