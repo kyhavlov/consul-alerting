@@ -50,6 +50,11 @@ func ParseConfigFile(path string) (*Config, []AlertHandler, error) {
 	return ParseConfig(raw)
 }
 
+func DefaultConfig() (*Config, []AlertHandler) {
+	config, handlers, _ := ParseConfig("{}")
+	return config, handlers
+}
+
 // Parses the given config string and returns a Config object and an array
 // of AlertHandlers
 func ParseConfig(raw string) (*Config, []AlertHandler, error) {

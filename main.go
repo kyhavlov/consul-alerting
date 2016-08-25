@@ -41,9 +41,10 @@ func main() {
 	}
 
 	// Load the configuration
-	config, handlers, err := ParseConfig("{}")
+	config, handlers := DefaultConfig()
 
 	if config_path != "" {
+		var err error
 		config, handlers, err = ParseConfigFile(config_path)
 		if err != nil {
 			log.Fatal(err)
