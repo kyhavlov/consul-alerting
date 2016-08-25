@@ -79,6 +79,11 @@ func tryAlert(kvPath string, watchOpts *WatchOptions) {
 		return
 	}
 
+	if alertState == nil {
+		log.Errorf("Alert state not found at path %s", kvPath)
+		return
+	}
+
 	if time.Now().Unix()-int64(watchOpts.changeThreshold) >= alertState.LastUpdated {
 		for _, handler := range watchOpts.handlers {
 			handler.Alert(alertState)

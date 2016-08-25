@@ -23,6 +23,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 	// Used to store services we've already started watches for
 	services := make(map[string][]string)
 
+	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
 		var queryMeta *api.QueryMeta
 		currentServices := make(map[string][]string)
@@ -55,6 +56,8 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 		// Update our WaitIndex for the next query
 		queryOpts.WaitIndex = queryMeta.LastIndex
 
+		// Compare the new list of services with our stored one to see if we need to
+		// spawn any new watches
 		for service, tags := range currentServices {
 			serviceConfig := config.getServiceConfig(service)
 
@@ -129,6 +132,7 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 	// Used to store nodes we've already started watches for
 	nodes := make([]string, 0)
 
+	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
 		currentNodes, queryMeta, err := client.Catalog().Nodes(queryOpts)
 
@@ -141,6 +145,8 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 		// Update our WaitIndex for the next query
 		queryOpts.WaitIndex = queryMeta.LastIndex
 
+		// Compare the new list of nodes with our stored one to see if we need to
+		// spawn any new watches
 		for _, node := range currentNodes {
 			nodeName := node.Node
 			if !contains(nodes, nodeName) {

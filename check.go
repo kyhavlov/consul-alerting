@@ -9,6 +9,8 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
+const alertingKVRoot = "service/consul-alerting"
+
 // CheckState is used for storing recent state for a given health check on a specific node,
 // in order to preserve alert state across restarts
 type CheckState struct {
@@ -82,7 +84,7 @@ type CheckUpdate struct {
 func updateCheckState(update CheckUpdate, client *api.Client) bool {
 	check := update.HealthCheck
 
-	kvPath := "service/consul-alerting"
+	kvPath := alertingKVRoot
 
 	if check.ServiceID != "" {
 		tagPath := ""

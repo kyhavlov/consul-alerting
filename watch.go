@@ -11,14 +11,29 @@ import (
 const watchWaitTime = 15 * time.Second
 const errorWaitTime = 10 * time.Second
 
+// The settings to use when performing a watch on a service or node
 type WatchOptions struct {
-	node            string
-	service         string
-	tag             string
+	// The node name in Consul to use. Only used when watching a node.
+	node string
+
+	// The service to watch. Only used when watching a service.
+	service string
+
+	// Optional. The tag to use when watching a service. If not specified, all nodes in
+	// the service will be used when checking its health.
+	tag string
+
+	// The duration that this service's health must remain stable before being alerted on
 	changeThreshold time.Duration
-	client          *api.Client
-	handlers        []AlertHandler
-	stopCh          chan struct{}
+
+	// The Consul client object to use for making requests
+	client *api.Client
+
+	// The list of AlertHandlers to call when an alert happens
+	handlers []AlertHandler
+
+	// A channel to use in order to stop the watch and release its lock.
+	stopCh chan struct{}
 }
 
 const ServiceWatch = "service"
@@ -63,7 +78,7 @@ func watch(opts *WatchOptions) {
 	name := mode + " " + opts.node
 
 	// The base path in the consul KV store to keep the state for this watch
-	keyPath := "service/consul-alerting/node/" + opts.node + "/"
+	keyPath := alertingKVRoot + "/node/" + opts.node + "/"
 	if mode == ServiceWatch {
 		name = mode + " " + opts.service
 		tagPath := ""
@@ -71,7 +86,7 @@ func watch(opts *WatchOptions) {
 			tagPath = opts.tag + "/"
 			name = name + fmt.Sprintf(" (tag: %s)", opts.tag)
 		}
-		keyPath = "service/consul-alerting/service/" + opts.service + "/" + tagPath
+		keyPath = alertingKVRoot + "/service/" + opts.service + "/" + tagPath
 	}
 	lockPath := keyPath + "leader"
 	alertPath := keyPath + "alert"
@@ -132,6 +147,8 @@ func watch(opts *WatchOptions) {
 
 	log.Debugf("Initialized watch for %s", name)
 
+	// The main loop for the watch, do blocking queries to monitor the state of this service/node
+	// and read changes in the health status for potential alerts
 	for {
 		// Check for shutdown event
 		select {
@@ -174,7 +191,8 @@ func watch(opts *WatchOptions) {
 		updates := diffCheckFunc(checks, lastCheckStatus, opts)
 
 		// If there's any health check status changes, try to update the remote/local check caches and
-		// see if the alert status changed
+		// see if the alert status changed. If it has, we want to start a quiescence timer that will
+		// alert if it lives past the changeThreshold
 		if len(updates) > 0 {
 			success := true
 
