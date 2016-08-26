@@ -41,6 +41,10 @@ handlers {
   email "admin" {
     recipients = ["admin@example.com"]
   }
+  pagerduty "page_ops" {
+    service_key = "asdf1234"
+    max_retries = 3
+  }
 }
 ```
 
@@ -65,8 +69,6 @@ The following options can be specified in a service block:
 | `ignored_tags`     | Tags to ignore when using `distinct_tags`. Useful when excluding generic tags like "master" that are spread across multiple clusters of the same service.
 
 #### Handler Options
-Handlers must have `enabled = true` in order to be active.
-
 **stdout**
 
 |       Option       | Description |
@@ -84,7 +86,7 @@ Handlers must have `enabled = true` in order to be active.
 |       Option       | Description |
 | ------------------ |------------ |
 | `service_key`      | The PagerDuty api key to use for alerting.
-| `max_retries`      | The maximum number of times to retry after a request failure when alerting. Defaults to 0.
+| `max_retries`      | The maximum number of times to retry after an api failure when alerting. Defaults to 0.
 
 #### Example log output:
 ```
