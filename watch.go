@@ -266,7 +266,7 @@ func diffServiceChecks(checks []*api.HealthCheck, lastStatus map[string]string, 
 			} else {
 				updates[checkHash] = CheckUpdate{HealthCheck: check}
 			}
-		} else {
+		} else if !ok {
 			updates[checkHash] = CheckUpdate{ServiceTag: opts.tag, HealthCheck: check}
 		}
 	}

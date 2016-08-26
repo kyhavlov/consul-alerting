@@ -35,12 +35,10 @@ service "elasticsearch" {
 }
 
 handlers {
-  stdout {
-    enabled = true
+  stdout "log" {
     log_level = "warn"
   }
-  email {
-    enabled = false
+  email "admin" {
     recipients = ["admin@example.com"]
   }
 }
@@ -80,6 +78,13 @@ Handlers must have `enabled = true` in order to be active.
 |       Option       | Description |
 | ------------------ |------------ |
 | `recipients`       | A list of email addresses to send alerts to.
+
+**pagerduty**
+
+|       Option       | Description |
+| ------------------ |------------ |
+| `service_key`      | The PagerDuty api key to use for alerting.
+| `max_retries`      | The maximum number of times to retry after a request failure when alerting. Defaults to 0.
 
 #### Example log output:
 ```

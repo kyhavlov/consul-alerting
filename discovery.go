@@ -75,16 +75,18 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 				// Create a watch for each tag if DistinctTags is set
 				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
 					for _, tag := range tags {
-						watchOpts := &WatchOptions{
-							service:         service,
-							tag:             tag,
-							changeThreshold: time.Duration(changeThreshold),
-							client:          client,
-							handlers:        handlers,
-							stopCh:          shutdownOpts.stopCh,
+						if !contains(serviceConfig.IgnoredTags, tag) {
+							watchOpts := &WatchOptions{
+								service:         service,
+								tag:             tag,
+								changeThreshold: time.Duration(changeThreshold),
+								client:          client,
+								handlers:        handlers,
+								stopCh:          shutdownOpts.stopCh,
+							}
+							shutdownOpts.count++
+							go watch(watchOpts)
 						}
-						shutdownOpts.count++
-						go watch(watchOpts)
 					}
 				} else {
 					// If it isn't, just start one watch for the service

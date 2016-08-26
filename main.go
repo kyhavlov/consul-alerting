@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -63,6 +64,10 @@ func main() {
 	// Initialize Consul client
 	clientConfig := api.DefaultConfig()
 	clientConfig.Address = config.ConsulAddress
+	if strings.HasPrefix(config.ConsulAddress, "https://") {
+		clientConfig.Address = strings.Split(config.ConsulAddress, "https://")[1]
+		clientConfig.Scheme = "https"
+	}
 	clientConfig.Token = config.ConsulToken
 
 	log.Infof("Using Consul agent at %s", clientConfig.Address)

@@ -33,8 +33,9 @@ type ServiceConfig struct {
 }
 
 type HandlerConfig struct {
-	StdoutHandler `hcl:"stdout"`
-	EmailHandler  `hcl:"email"`
+	StdoutHandlers    []StdoutHandler    `hcl:"stdout"`
+	EmailHandlers     []EmailHandler     `hcl:"email"`
+	PagerdutyHandlers []PagerdutyHandler `hcl:"pagerduty"`
 }
 
 // Parses a given file path for config and returns a Config object and an array
@@ -101,21 +102,26 @@ func ParseConfig(raw string) (*Config, []AlertHandler, error) {
 	// Configure alert handlers
 	handlers := make([]AlertHandler, 0)
 
-	if config.Handlers.StdoutHandler.Enabled {
-		if config.Handlers.StdoutHandler.LogLevel == "" {
-			config.Handlers.StdoutHandler.LogLevel = "warn"
+	for _, handler := range config.Handlers.StdoutHandlers {
+		if handler.LogLevel == "" {
+			handler.LogLevel = "warn"
 		}
-		_, err := log.ParseLevel(config.Handlers.StdoutHandler.LogLevel)
+		_, err := log.ParseLevel(handler.LogLevel)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Error parsing loglevel %s: %s", config.Handlers.StdoutHandler.LogLevel, err)
+			return nil, nil, fmt.Errorf("Error parsing loglevel %s: %s", handler.LogLevel, err)
 		}
-		log.Infof("Handler 'stdout' enabled with loglevel %s", config.Handlers.StdoutHandler.LogLevel)
-		handlers = append(handlers, config.Handlers.StdoutHandler)
+		log.Infof("Handler stdout enabled with loglevel %s", handler.LogLevel)
+		handlers = append(handlers, handler)
 	}
 
-	if config.Handlers.EmailHandler.Enabled {
-		log.Info("Handler 'email' enabled")
-		handlers = append(handlers, config.Handlers.EmailHandler)
+	for _, handler := range config.Handlers.EmailHandlers {
+		log.Infof("Handler email enabled with recipients: %v", handler.Recipients)
+		handlers = append(handlers, handler)
+	}
+
+	for _, handler := range config.Handlers.PagerdutyHandlers {
+		log.Infof("Handler pagerduty enabled")
+		handlers = append(handlers, handler)
 	}
 
 	return config, handlers, nil

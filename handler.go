@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/gomail.v2"
 	"net"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/darkcrux/gopherduty"
+	"github.com/hashicorp/consul/api"
+	"gopkg.in/gomail.v2"
 )
 
 // AlertHandlers are responsible for alerting to some external endpoint
@@ -16,7 +18,7 @@ type AlertHandler interface {
 }
 
 type StdoutHandler struct {
-	Enabled  bool   `hcl:"enabled"`
+	Name     string `hcl:",key"`
 	LogLevel string `hcl:"log_level"`
 }
 
@@ -39,8 +41,7 @@ func (s StdoutHandler) Alert(alert *AlertState) {
 }
 
 type EmailHandler struct {
-	Enabled    bool     `hcl:"enabled"`
-	Server     string   `hcl:"domain"`
+	Name       string   `hcl:",key"`
 	Recipients []string `hcl:"recipients"`
 }
 
@@ -65,5 +66,22 @@ func (e EmailHandler) Alert(alert *AlertState) {
 		if err := d.DialAndSend(m); err != nil {
 			log.Error(err)
 		}
+	}
+}
+
+type PagerdutyHandler struct {
+	Name       string `hcl:",key"`
+	ServiceKey string `hcl:"service_key"`
+	MaxRetries int    `hcl:"max_retries"`
+}
+
+func (p PagerdutyHandler) Alert(alert *AlertState) {
+	client := gopherduty.NewClient(p.ServiceKey)
+	client.MaxRetry = p.MaxRetries
+	incidentKey := alert.Service + "-" + alert.Tag + "-" + alert.Node
+	if alert.Status != api.HealthPassing {
+		client.Trigger(incidentKey, alert.Message, "", "", alert.Details)
+	} else {
+		client.Resolve(incidentKey, alert.Message, alert.Details)
 	}
 }

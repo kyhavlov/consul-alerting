@@ -36,12 +36,10 @@ func TestParseConfig_correctValues(t *testing.T) {
 	}
 
 	handlers {
-		stdout {
-			enabled = true
+		stdout "log" {
 			log_level = "error"
 		}
-		email {
-			enabled = false
+		email "low-priority" {
 			recipients = ["admin@example.com"]
 		}
 	}
@@ -68,29 +66,28 @@ func TestParseConfig_correctValues(t *testing.T) {
 			},
 		},
 		Handlers: HandlerConfig{
-			StdoutHandler{
-				Enabled:  true,
-				LogLevel: "error",
+			StdoutHandlers: []StdoutHandler{
+				StdoutHandler{
+					Name:     "log",
+					LogLevel: "error",
+				},
 			},
-			EmailHandler{
-				Enabled:    false,
-				Recipients: []string{"admin@example.com"},
+			EmailHandlers: []EmailHandler{
+				EmailHandler{
+					Name:       "low-priority",
+					Recipients: []string{"admin@example.com"},
+				},
 			},
 		},
 	}
-	expectedHandlers := []AlertHandler{
-		StdoutHandler{
-			Enabled:  true,
-			LogLevel: "error",
-		},
-	}
+	expectedHandlers := []AlertHandler{expected.Handlers.StdoutHandlers[0], expected.Handlers.EmailHandlers[0]}
 
 	if !reflect.DeepEqual(config, expected) {
 		t.Fatalf("expected \n%#v\n\n, got \n\n%#v\n\n", expected, config)
 	}
 
-	if len(handlers) != 1 {
-		t.Fatalf("expected %d handlers, got %d", 1, len(handlers))
+	if len(handlers) != 2 {
+		t.Fatalf("expected %d handlers, got %d", 2, len(handlers))
 	}
 
 	if !reflect.DeepEqual(handlers, expectedHandlers) {

@@ -15,6 +15,18 @@
 			"revisionTime": "2016-01-15T23:47:25Z"
 		},
 		{
+			"checksumSHA1": "fYeLFn6SteybWt1CLv2s3bI2XWc=",
+			"path": "github.com/darkcrux/gopherduty",
+			"revision": "f4906ce7e59b33a50bfbcba93e2cf58778c11fb9",
+			"revisionTime": "2015-01-27T01:20:16Z"
+		},
+		{
+			"checksumSHA1": "yyAzHoiVLu+xywYI2BDyRq6sOqE=",
+			"path": "github.com/google/go-querystring/query",
+			"revision": "9235644dd9e52eeae6fa48efd539fdc351a0af53",
+			"revisionTime": "2016-03-11T01:20:12Z"
+		},
+		{
 			"checksumSHA1": "GX0szvZYEs4t4psFiucEU/Fnyg4=",
 			"path": "github.com/hashicorp/consul-template/test",
 			"revision": "f2aeb191d6e6bc4e5ed44a71f03bebb732231b94",
