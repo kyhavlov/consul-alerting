@@ -253,14 +253,14 @@ func diffServiceChecks(checks []*api.HealthCheck, lastStatus map[string]string, 
 		if oldStatus, ok := lastStatus[checkHash]; ok && oldStatus != check.Status {
 			// If it did, make sure it's for our tag (if specified)
 			if opts.tag != "" {
-				nodeServices, err := opts.client.Agent().Services()
+				node, _, err := opts.client.Catalog().Node(check.Node, &api.QueryOptions{})
 
 				if err != nil {
 					log.Errorf("Error trying to get service info for node '%s': %s", check.Node, err)
 					continue
 				}
 
-				if nodeService, ok := nodeServices[opts.service]; ok && contains(nodeService.Tags, opts.tag) {
+				if nodeService, ok := node.Services[opts.service]; ok && contains(nodeService.Tags, opts.tag) {
 					updates[checkHash] = CheckUpdate{ServiceTag: opts.tag, HealthCheck: check}
 				}
 			} else {
