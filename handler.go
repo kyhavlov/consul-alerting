@@ -18,8 +18,7 @@ type AlertHandler interface {
 }
 
 type StdoutHandler struct {
-	Name     string `hcl:",key"`
-	LogLevel string `hcl:"log_level"`
+	LogLevel string `mapstructure:"log_level"`
 }
 
 func (s StdoutHandler) Alert(alert *AlertState) {
@@ -41,8 +40,7 @@ func (s StdoutHandler) Alert(alert *AlertState) {
 }
 
 type EmailHandler struct {
-	Name       string   `hcl:",key"`
-	Recipients []string `hcl:"recipients"`
+	Recipients []string `mapstructure:"recipients"`
 }
 
 func (e EmailHandler) Alert(alert *AlertState) {
@@ -70,9 +68,8 @@ func (e EmailHandler) Alert(alert *AlertState) {
 }
 
 type PagerdutyHandler struct {
-	Name       string `hcl:",key"`
-	ServiceKey string `hcl:"service_key"`
-	MaxRetries int    `hcl:"max_retries"`
+	ServiceKey string `mapstructure:"service_key"`
+	MaxRetries int    `mapstructure:"max_retries"`
 }
 
 func (p PagerdutyHandler) Alert(alert *AlertState) {

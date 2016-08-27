@@ -42,11 +42,11 @@ func main() {
 	}
 
 	// Load the configuration
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 
 	if config_path != "" {
 		var err error
-		config, handlers, err = ParseConfigFile(config_path)
+		config, err = ParseConfigFile(config_path)
 		if err != nil {
 			log.Fatal(err)
 			os.Exit(2)
@@ -64,9 +64,10 @@ func main() {
 	// Initialize Consul client
 	clientConfig := api.DefaultConfig()
 	clientConfig.Address = config.ConsulAddress
-	if strings.HasPrefix(config.ConsulAddress, "https://") {
-		clientConfig.Address = strings.Split(config.ConsulAddress, "https://")[1]
-		clientConfig.Scheme = "https"
+	addressSplit := strings.Split(config.ConsulAddress, "://")
+	if len(addressSplit) > 1 {
+		clientConfig.Address = addressSplit[1]
+		clientConfig.Scheme = addressSplit[0]
 	}
 	clientConfig.Token = config.ConsulToken
 
@@ -94,12 +95,12 @@ func main() {
 		stopCh: make(chan struct{}, 0),
 	}
 
-	go discoverServices(nodeName, config, handlers, shutdownOpts, client)
+	go discoverServices(nodeName, config, shutdownOpts, client)
 
 	// If NodeWatch is set to global mode, monitor the catalog for new nodes
 	if config.NodeWatch == GlobalMode {
 		log.Info("Discovering nodes from catalog")
-		go discoverNodes(config, handlers, shutdownOpts, client)
+		go discoverNodes(config, shutdownOpts, client)
 	} else {
 		log.Infof("Monitoring local node (%s)'s checks", nodeName)
 		// We're in local mode so we don't need to discover the local node; it won't change
@@ -107,7 +108,7 @@ func main() {
 			node:            nodeName,
 			changeThreshold: time.Duration(config.ChangeThreshold),
 			client:          client,
-			handlers:        handlers,
+			handlers:        config.getServiceHandlers(""),
 			stopCh:          shutdownOpts.stopCh,
 		}
 		shutdownOpts.count++

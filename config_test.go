@@ -9,7 +9,7 @@ import (
 )
 
 func TestConfig_missingFile(t *testing.T) {
-	_, _, err := ParseConfigFile(path.Join(os.TempDir(), "nonexistant.json"))
+	_, err := ParseConfigFile(path.Join(os.TempDir(), "nonexistant.json"))
 	if err == nil {
 		t.Fatal("expected error, but nothing was returned")
 	}
@@ -20,7 +20,7 @@ func TestConfig_missingFile(t *testing.T) {
 	}
 }
 
-func TestParseConfig_correctValues(t *testing.T) {
+func TestConfig_correctValues(t *testing.T) {
 	configString := `
 	consul_address = "localhost:8500"
 	token = "test_token"
@@ -35,17 +35,21 @@ func TestParseConfig_correctValues(t *testing.T) {
 		ignored_tags = ["seed", "node"]
 	}
 
-	handlers {
-		stdout "log" {
-			log_level = "error"
-		}
-		email "low-priority" {
-			recipients = ["admin@example.com"]
-		}
+	handler "stdout" "log" {
+		log_level = "error"
+	}
+
+	handler "email" "admin" {
+		recipients = ["admin@example.com"]
+	}
+
+	handler "pagerduty" "page_ops" {
+		service_key = "asdf1234"
+		max_retries = 10
 	}
 	`
 
-	config, handlers, err := ParseConfig(configString)
+	config, err := ParseConfig(configString)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,40 +61,33 @@ func TestParseConfig_correctValues(t *testing.T) {
 		ServiceWatch:    "global",
 		ChangeThreshold: 30,
 		LogLevel:        "warn",
-		Services: []ServiceConfig{
-			ServiceConfig{
+		Services: map[string]ServiceConfig{
+			"redis": ServiceConfig{
 				Name:            "redis",
 				ChangeThreshold: 15,
 				DistinctTags:    true,
 				IgnoredTags:     []string{"seed", "node"},
 			},
 		},
-		Handlers: HandlerConfig{
-			StdoutHandlers: []StdoutHandler{
-				StdoutHandler{
-					Name:     "log",
-					LogLevel: "error",
-				},
+		Handlers: map[string]AlertHandler{
+			"log": StdoutHandler{
+				LogLevel: "error",
 			},
-			EmailHandlers: []EmailHandler{
-				EmailHandler{
-					Name:       "low-priority",
-					Recipients: []string{"admin@example.com"},
-				},
+			"admin": EmailHandler{
+				Recipients: []string{"admin@example.com"},
+			},
+			"page_ops": PagerdutyHandler{
+				ServiceKey: "asdf1234",
+				MaxRetries: 10,
 			},
 		},
 	}
-	expectedHandlers := []AlertHandler{expected.Handlers.StdoutHandlers[0], expected.Handlers.EmailHandlers[0]}
 
 	if !reflect.DeepEqual(config, expected) {
 		t.Fatalf("expected \n%#v\n\n, got \n\n%#v\n\n", expected, config)
 	}
 
-	if len(handlers) != 2 {
-		t.Fatalf("expected %d handlers, got %d", 2, len(handlers))
-	}
-
-	if !reflect.DeepEqual(handlers, expectedHandlers) {
-		t.Fatalf("expected \n%#v\n\n, got \n\n%#v\n\n", expectedHandlers, handlers)
+	if len(config.Handlers) != len(expected.Handlers) {
+		t.Fatalf("expected %d handlers, got %d", len(expected.Handlers), len(config.Handlers))
 	}
 }

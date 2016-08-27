@@ -29,10 +29,10 @@ func TestDiscovery_existingServiceLocal(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverServices(server.Config.NodeName, config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverServices(server.Config.NodeName, config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 
@@ -49,10 +49,10 @@ func TestDiscovery_discoveredServiceLocal(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverServices(server.Config.NodeName, config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverServices(server.Config.NodeName, config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 
@@ -79,11 +79,11 @@ func TestDiscovery_existingServiceGlobal(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.ServiceWatch = GlobalMode
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverServices(server1.Config.NodeName, config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverServices(server1.Config.NodeName, config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 
@@ -107,11 +107,11 @@ func TestDiscovery_discoveredServiceGlobal(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.ServiceWatch = GlobalMode
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverServices(server1.Config.NodeName, config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverServices(server1.Config.NodeName, config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 
@@ -131,10 +131,10 @@ func TestDiscovery_existingNode(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverNodes(config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverNodes(config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 
@@ -148,10 +148,10 @@ func TestDiscovery_discoveredNode(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	config, handlers := DefaultConfig()
+	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	handlers = append(handlers, testHandler{alertCh})
-	go discoverNodes(config, handlers, &ShutdownOpts{}, client)
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverNodes(config, &ShutdownOpts{}, client)
 
 	<-time.After(1 * time.Second)
 

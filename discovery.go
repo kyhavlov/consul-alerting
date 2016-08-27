@@ -8,7 +8,7 @@ import (
 )
 
 // Spawns watches for services, adding more when new services are discovered
-func discoverServices(nodeName string, config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
 	if config.ServiceWatch == GlobalMode {
 		log.Info("Discovering services from catalog")
 	} else {
@@ -81,7 +81,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 								tag:             tag,
 								changeThreshold: time.Duration(changeThreshold),
 								client:          client,
-								handlers:        handlers,
+								handlers:        config.getServiceHandlers(service),
 								stopCh:          shutdownOpts.stopCh,
 							}
 							shutdownOpts.count++
@@ -94,7 +94,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 						service:         service,
 						changeThreshold: time.Duration(changeThreshold),
 						client:          client,
-						handlers:        handlers,
+						handlers:        config.getServiceHandlers(service),
 						stopCh:          shutdownOpts.stopCh,
 					}
 					shutdownOpts.count++
@@ -112,7 +112,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 								tag:             tag,
 								changeThreshold: time.Duration(changeThreshold),
 								client:          client,
-								handlers:        handlers,
+								handlers:        config.getServiceHandlers(service),
 								stopCh:          shutdownOpts.stopCh,
 							})
 							shutdownOpts.count++
@@ -125,7 +125,7 @@ func discoverServices(nodeName string, config *Config, handlers []AlertHandler, 
 }
 
 // Queries the catalog for nodes and starts watches for them
-func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
 	queryOpts := &api.QueryOptions{
 		AllowStale: true,
 		WaitTime:   watchWaitTime,
@@ -157,7 +157,7 @@ func discoverNodes(config *Config, handlers []AlertHandler, shutdownOpts *Shutdo
 					node:            nodeName,
 					changeThreshold: time.Duration(config.ChangeThreshold),
 					client:          client,
-					handlers:        handlers,
+					handlers:        config.getServiceHandlers(""),
 					stopCh:          shutdownOpts.stopCh,
 				}
 				shutdownOpts.count++

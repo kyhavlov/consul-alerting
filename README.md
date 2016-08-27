@@ -18,33 +18,32 @@ The Consul Alerting configuration files are written in [HashiCorp Configuration 
 ##### Example Config
 ```hcl
 consul_address = "localhost:8500"
+consul_token = "secret"
 
 node_watch = "local"
 service_watch = "global"
-change_threshold = 30
+change_threshold = 60
 log_level = "info"
 
 service "redis" {
-  change_threshold = 15
+  change_threshold = 30
   distinct_tags = true
 }
 
-service "elasticsearch" {
-  distinct_tags = true
-  ignored_tags = ["master", "client"]
+service "nginx" {
+  change_threshold = 10
 }
 
-handlers {
-  stdout "log" {
-    log_level = "warn"
-  }
-  email "admin" {
-    recipients = ["admin@example.com"]
-  }
-  pagerduty "page_ops" {
-    service_key = "asdf1234"
-    max_retries = 3
-  }
+handler "stdout" "log" {
+  log_level = "warn"
+}
+
+handler "email" "admin" {
+  recipients = ["admin@example.com"]
+}
+handler "pagerduty" "page_ops" {
+  service_key = "asdf1234"
+  max_retries = 10
 }
 ```
 
@@ -90,25 +89,30 @@ The following options can be specified in a service block:
 
 #### Example log output:
 ```
-[Aug 21 19:15:19]  INFO Handler 'stdout' enabled with loglevel warn
-[Aug 21 19:15:20]  INFO Running in local mode, monitoring node consul's services
-[Aug 21 19:15:20]  INFO Waiting to acquire lock on node consul...
-[Aug 21 19:15:20]  INFO Service found: consul, tags: []
-[Aug 21 19:15:20]  INFO Service found: nginx, tags: [gamma delta]
-[Aug 21 19:15:20]  INFO Service found: redis, tags: [alpha beta]
-[Aug 21 19:15:20]  INFO Waiting to acquire lock on service nginx...
-[Aug 21 19:15:20]  INFO Waiting to acquire lock on service redis (tag: alpha)...
-[Aug 21 19:15:20]  INFO Waiting to acquire lock on service redis (tag: beta)...
-[Aug 21 19:15:20]  INFO Waiting to acquire lock on service consul...
-[Aug 21 19:15:20]  INFO Acquired lock for node consul
-[Aug 21 19:15:20]  INFO Acquired lock for service nginx
-[Aug 21 19:15:20]  INFO Acquired lock for service consul
-[Aug 21 19:15:20]  INFO Acquired lock for service redis (tag: alpha)
-[Aug 21 19:15:20]  INFO Acquired lock for service redis (tag: beta)
-[Aug 21 19:15:30]  WARN service nginx is now warning (Unhealthy nodes: [consul])
-[Aug 21 19:15:46]  WARN service nginx is now critical (Unhealthy nodes: [consul])
-[Aug 21 19:15:58]  WARN node consul is now warning (Failing checks: [memory usage Service 'nginx' check Service 'redis' check])
-[Aug 21 19:15:59]  WARN service redis (tag: alpha) is now warning (Unhealthy nodes: [consul])
+[Aug 27 19:03:46]  INFO Loaded stdout handler: log
+[Aug 27 19:03:46]  INFO Using Consul agent at 192.168.1.3:8500
+[Aug 27 19:03:46]  INFO Monitoring local node (consul)'s checks
+[Aug 27 19:03:46]  INFO Discovering services from catalog
+[Aug 27 19:03:46]  INFO Waiting to acquire lock on node consul...
+[Aug 27 19:03:46]  INFO Service found: redis, tags: [alpha beta]
+[Aug 27 19:03:46]  INFO Service found: consul, tags: []
+[Aug 27 19:03:46]  INFO Service found: nginx, tags: [gamma delta]
+[Aug 27 19:03:46]  INFO Waiting to acquire lock on service redis (tag: alpha)...
+[Aug 27 19:03:46]  INFO Waiting to acquire lock on service nginx...
+[Aug 27 19:03:46]  INFO Waiting to acquire lock on service consul...
+[Aug 27 19:03:46]  INFO Waiting to acquire lock on service redis (tag: beta)...
+[Aug 27 19:03:46]  INFO Acquired lock for node consul
+[Aug 27 19:03:46]  INFO Acquired lock for service consul
+[Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: beta)
+[Aug 27 19:03:46]  INFO Acquired lock for service nginx
+[Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: alpha)
+[Aug 27 19:04:01]  WARN service nginx is now warning (Unhealthy nodes: [consul])
+[Aug 27 19:04:04]  WARN node consul is now warning (Failing checks: [memory usage])
+[Aug 27 19:04:19]  WARN service nginx is now critical (Unhealthy nodes: [consul])
+[Aug 27 19:04:27]  WARN service redis (tag: alpha) is now critical (Unhealthy nodes: [consul])
+[Aug 27 19:05:07]  WARN service redis (tag: beta) is now critical (Unhealthy nodes: [consul])
+[Aug 27 19:05:07]  WARN service nginx is now warning (Unhealthy nodes: [consul])
+[Aug 27 19:05:25]  WARN service nginx is now critical (Unhealthy nodes: [consul])
 ```
 
 [HCL]: https://github.com/hashicorp/hcl "HashiCorp Configuration Language (HCL)"
