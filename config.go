@@ -14,13 +14,14 @@ const LocalMode = "local"
 const GlobalMode = "global"
 
 type Config struct {
-	ConsulAddress   string `mapstructure:"consul_address"`
-	ConsulToken     string `mapstructure:"token"`
-	DevMode         bool   `mapstructure:"dev_mode"`
-	NodeWatch       string `mapstructure:"node_watch"`
-	ServiceWatch    string `mapstructure:"service_watch"`
-	ChangeThreshold int    `mapstructure:"change_threshold"`
-	LogLevel        string `mapstructure:"log_level"`
+	ConsulAddress   string   `mapstructure:"consul_address"`
+	ConsulToken     string   `mapstructure:"token"`
+	DevMode         bool     `mapstructure:"dev_mode"`
+	NodeWatch       string   `mapstructure:"node_watch"`
+	ServiceWatch    string   `mapstructure:"service_watch"`
+	ChangeThreshold int      `mapstructure:"change_threshold"`
+	DefaultHandlers []string `mapstructure:"default_handlers"`
+	LogLevel        string   `mapstructure:"log_level"`
 
 	Services map[string]ServiceConfig
 	Handlers map[string]AlertHandler
@@ -31,6 +32,7 @@ type ServiceConfig struct {
 	ChangeThreshold int      `mapstructure:"change_threshold"`
 	DistinctTags    bool     `mapstructure:"distinct_tags"`
 	IgnoredTags     []string `mapstructure:"ignored_tags"`
+	Handlers        []string `mapstructure:"handlers"`
 }
 
 // Parses a given file path for config and returns a Config object and an array
@@ -175,6 +177,7 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 		}
 		handlerType := s.Keys[0].Token.Value().(string)
 		name := s.Keys[1].Token.Value().(string)
+		id := handlerType + "." + name
 
 		var m map[string]interface{}
 		if err := hcl.DecodeObject(&m, s.Val); err != nil {
@@ -198,24 +201,24 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 			if err := mapstructure.WeakDecode(m, &handler); err != nil {
 				return err
 			}
-			config.Handlers[name] = handler
+			config.Handlers[id] = handler
 		case "email":
 			var handler EmailHandler
 			if err := mapstructure.WeakDecode(m, &handler); err != nil {
 				return err
 			}
-			config.Handlers[name] = handler
+			config.Handlers[id] = handler
 		case "pagerduty":
 			var handler PagerdutyHandler
 			if err := mapstructure.WeakDecode(m, &handler); err != nil {
 				return err
 			}
-			config.Handlers[name] = handler
+			config.Handlers[id] = handler
 		default:
 			return fmt.Errorf("Unknown handler type: %s", handlerType)
 		}
 
-		log.Infof("Loaded %s handler: %s", handlerType, name)
+		log.Infof("Loaded handler: %s", id)
 	}
 
 	return nil
@@ -229,10 +232,21 @@ func (config *Config) serviceConfig(service string) *ServiceConfig {
 	}
 }
 
+// Loads the configured alert handlers for a given service, filtering if applicable
 func (c *Config) serviceHandlers(service string) []AlertHandler {
 	handlers := make([]AlertHandler, 0)
-	for _, handler := range c.Handlers {
-		handlers = append(handlers, handler)
+	filters := make([]string, 0)
+	serviceConfig := c.serviceConfig(service)
+	if serviceConfig != nil {
+		filters = serviceConfig.Handlers
+	}
+	if len(filters) == 0 {
+		filters = c.DefaultHandlers
+	}
+	for name, handler := range c.Handlers {
+		if len(filters) == 0 || contains(filters, name) {
+			handlers = append(handlers, handler)
+		}
 	}
 	return handlers
 }

@@ -24,9 +24,13 @@ func TestConfig_correctValues(t *testing.T) {
 	configString := `
 	consul_address = "localhost:8500"
 	token = "test_token"
+
 	node_watch = "local"
 	service_watch = "global"
+
 	change_threshold = 30
+	default_handlers = ["stdout.warn", "email.admin"]
+
 	log_level = "warn"
 
 	service "redis" {
@@ -35,8 +39,12 @@ func TestConfig_correctValues(t *testing.T) {
 		ignored_tags = ["seed", "node"]
 	}
 
-	handler "stdout" "log" {
-		log_level = "error"
+	service "webapp" {
+		handlers = ["email.admin"]
+	}
+
+	handler "stdout" "warn" {
+		log_level = "warn"
 	}
 
 	handler "email" "admin" {
@@ -60,6 +68,7 @@ func TestConfig_correctValues(t *testing.T) {
 		NodeWatch:       "local",
 		ServiceWatch:    "global",
 		ChangeThreshold: 30,
+		DefaultHandlers: []string{"stdout.warn", "email.admin"},
 		LogLevel:        "warn",
 		Services: map[string]ServiceConfig{
 			"redis": ServiceConfig{
@@ -68,15 +77,20 @@ func TestConfig_correctValues(t *testing.T) {
 				DistinctTags:    true,
 				IgnoredTags:     []string{"seed", "node"},
 			},
+			"webapp": ServiceConfig{
+				Name:            "webapp",
+				ChangeThreshold: 30,
+				Handlers:        []string{"email.admin"},
+			},
 		},
 		Handlers: map[string]AlertHandler{
-			"log": StdoutHandler{
-				LogLevel: "error",
+			"stdout.warn": StdoutHandler{
+				LogLevel: "warn",
 			},
-			"admin": EmailHandler{
+			"email.admin": EmailHandler{
 				Recipients: []string{"admin@example.com"},
 			},
-			"page_ops": PagerdutyHandler{
+			"pagerduty.page_ops": PagerdutyHandler{
 				ServiceKey: "asdf1234",
 				MaxRetries: 10,
 			},
@@ -89,5 +103,52 @@ func TestConfig_correctValues(t *testing.T) {
 
 	if len(config.Handlers) != len(expected.Handlers) {
 		t.Fatalf("expected %d handlers, got %d", len(expected.Handlers), len(config.Handlers))
+	}
+}
+
+func TestConfig_defaultHandlers(t *testing.T) {
+	config := &Config{
+		DefaultHandlers: []string{"stdout.warn"},
+		Handlers: map[string]AlertHandler{
+			"stdout.warn": StdoutHandler{
+				LogLevel: "warn",
+			},
+		},
+	}
+
+	handlers := config.serviceHandlers("")
+
+	if len(handlers) != len(config.Handlers) {
+		t.Fatalf("expected %d handlers, got %d", len(config.Handlers), len(handlers))
+	}
+
+	if !reflect.DeepEqual(config.Handlers["stdout.warn"], handlers[0]) {
+		t.Fatalf("expected \n%#v\n\n, got \n\n%#v\n\n", config.Handlers["stdout.warn"], config)
+	}
+}
+
+func TestConfig_serviceHandlers(t *testing.T) {
+	config := &Config{
+		Services: map[string]ServiceConfig{
+			"webapp": ServiceConfig{
+				Name:     "webapp",
+				Handlers: []string{"stdout.warn"},
+			},
+		},
+		Handlers: map[string]AlertHandler{
+			"stdout.warn": StdoutHandler{
+				LogLevel: "warn",
+			},
+		},
+	}
+
+	handlers := config.serviceHandlers("webapp")
+
+	if len(handlers) != len(config.Handlers) {
+		t.Fatalf("expected %d handlers, got %d", len(config.Handlers), len(handlers))
+	}
+
+	if !reflect.DeepEqual(config.Handlers["stdout.warn"], handlers[0]) {
+		t.Fatalf("expected \n%#v\n\n, got \n\n%#v\n\n", config.Handlers["stdout.warn"], config)
 	}
 }
