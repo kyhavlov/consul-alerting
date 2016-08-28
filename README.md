@@ -54,7 +54,7 @@ handler "pagerduty" "page_ops" {
 
 handler "slack" "dev_channel" {
   api_token = "mytoken"
-  channel_name = "alerts"
+  channel_name = "webapp_team"
 }
 ```
 
@@ -85,27 +85,27 @@ The following options can be specified in a service block:
 
 |       Option       | Description |
 | ------------------ |------------ |
-| `log_level`        | The log level to log alerts to. Defaults to "warn".
+| `log_level`        | The level to log alerts on. Defaults to "warn".
 
 **email**
 
 |       Option       | Description |
 | ------------------ |------------ |
-| `recipients`       | A list of email addresses to send alerts to.
+| `recipients`       | The list of email addresses to use.
 
 **pagerduty**
 
 |       Option       | Description |
 | ------------------ |------------ |
-| `service_key`      | The PagerDuty api key to use for alerting.
+| `service_key`      | The PagerDuty api key to use.
 | `max_retries`      | The maximum number of times to retry after an api failure when alerting. Defaults to 5.
 
 **slack**
 
 |       Option       | Description |
 | ------------------ |------------ |
-| `api_token`        | The Slack api token to use for sending messages.
-| `channel_name`     | The Slack channel name to send alert messages to.
+| `api_token`        | The Slack api token to use.
+| `channel_name`     | The Slack channel name to send alerts to.
 
 #### Example log output:
 ```
