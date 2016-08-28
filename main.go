@@ -21,14 +21,16 @@ Options:
     -config=<path>    Sets the path to a configuration file on disk.
 `
 
-func main() {
+func init() {
 	// Set up logging
 	formatter := new(prefixed.TextFormatter)
 	formatter.ForceColors = true
 
 	log.SetFormatter(formatter)
 	log.SetLevel(log.DebugLevel)
+}
 
+func main() {
 	// Parse command line options
 	var config_path string
 	var help bool
@@ -42,7 +44,7 @@ func main() {
 	}
 
 	// Load the configuration
-	config := DefaultConfig()
+	var config *Config
 
 	if config_path != "" {
 		var err error
@@ -51,6 +53,8 @@ func main() {
 			log.Fatal(err)
 			os.Exit(2)
 		}
+	} else {
+		config = DefaultConfig()
 	}
 
 	// Set log level

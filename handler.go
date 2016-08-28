@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/bluele/slack"
 	"github.com/darkcrux/gopherduty"
 	"github.com/hashicorp/consul/api"
 	"gopkg.in/gomail.v2"
@@ -80,5 +81,24 @@ func (p PagerdutyHandler) Alert(alert *AlertState) {
 		client.Trigger(incidentKey, alert.Message, "", "", alert.Details)
 	} else {
 		client.Resolve(incidentKey, alert.Message, alert.Details)
+	}
+}
+
+type SlackHandler struct {
+	Token       string `mapstructure:"api_token"`
+	ChannelName string `mapstructure:"channel_name"`
+}
+
+const slackMessageFormat = `
+*%s*
+%s
+`
+
+func (p SlackHandler) Alert(alert *AlertState) {
+	api := slack.New(p.Token)
+	err := api.ChatPostMessage(p.ChannelName, fmt.Sprintf(slackMessageFormat, alert.Message, alert.Details), nil)
+
+	if err != nil {
+		log.Errorf("Error sending alert to Slack (channel: %s): %s", p.ChannelName, err)
 	}
 }

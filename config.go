@@ -49,7 +49,11 @@ func ParseConfigFile(path string) (*Config, error) {
 }
 
 func DefaultConfig() *Config {
-	config, _ := ParseConfig("{}")
+	config, _ := ParseConfig(`
+	handler "stdout" "default" {
+		loglevel = "warn"
+	}
+	`)
 	return config
 }
 
@@ -210,6 +214,12 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 			config.Handlers[id] = handler
 		case "pagerduty":
 			var handler PagerdutyHandler
+			if err := mapstructure.WeakDecode(m, &handler); err != nil {
+				return err
+			}
+			config.Handlers[id] = handler
+		case "slack":
+			var handler SlackHandler
 			if err := mapstructure.WeakDecode(m, &handler); err != nil {
 				return err
 			}

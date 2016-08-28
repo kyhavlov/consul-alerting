@@ -15,6 +15,12 @@
 			"revisionTime": "2016-01-15T23:47:25Z"
 		},
 		{
+			"checksumSHA1": "48BVK1LS/mw6CydZKLsTLVjeCDM=",
+			"path": "github.com/bluele/slack",
+			"revision": "a04fc519c7bffed19b018e1200ad6f312e093af3",
+			"revisionTime": "2016-08-12T15:11:05Z"
+		},
+		{
 			"checksumSHA1": "fYeLFn6SteybWt1CLv2s3bI2XWc=",
 			"path": "github.com/darkcrux/gopherduty",
 			"revision": "f4906ce7e59b33a50bfbcba93e2cf58778c11fb9",

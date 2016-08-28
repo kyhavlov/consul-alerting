@@ -55,6 +55,11 @@ func TestConfig_correctValues(t *testing.T) {
 		service_key = "asdf1234"
 		max_retries = 10
 	}
+
+	handler "slack" "dev_channel" {
+		api_token = "mytoken"
+		channel_name = "alerts"
+	}
 	`
 
 	config, err := ParseConfig(configString)
@@ -93,6 +98,10 @@ func TestConfig_correctValues(t *testing.T) {
 			"pagerduty.page_ops": PagerdutyHandler{
 				ServiceKey: "asdf1234",
 				MaxRetries: 10,
+			},
+			"slack.dev_channel": SlackHandler{
+				Token:       "mytoken",
+				ChannelName: "alerts",
 			},
 		},
 	}

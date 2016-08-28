@@ -36,7 +36,7 @@ service "redis" {
 
 service "webapp" {
   change_threshold = 45
-  handlers = ["pagerduty.app_team"]
+  handlers = ["slack.dev_channel"]
 }
 
 handler "stdout" "log" {
@@ -52,8 +52,9 @@ handler "pagerduty" "page_ops" {
   max_retries = 10
 }
 
-handler "pagerduty" "app_team" {
-  service_key = "zxcv0987"
+handler "slack" "dev_channel" {
+  api_token = "mytoken"
+  channel_name = "alerts"
 }
 ```
 
@@ -66,7 +67,7 @@ handler "pagerduty" "app_team" {
 | `node_watch`       | The setting to use for discovering nodes. If set to `local`, only the local node's health will be watched. If set to `global`, all nodes in the catalog will be watched. Defaults to `local`.
 | `service_watch`    | The setting to use for discovering services. If set to `local`, only services on the local node will be watch. If set to `global`, all services in the catalog will be watched. Defaults to `local`.
 | `change_threshold` | The time (in seconds) that a check must be in a failing state before alerting. Defaults to 60.
-| `default_handlers` | The default list of handlers to send alerts to, in the form "type.name". Defaults to all handlers.
+| `default_handlers` | The default list of handlers to send alerts to, in the form `type.name`. Defaults to all handlers.
 | `log_level`        | The logging level to use. Defaults to `info`.
 
 #### Service Options
@@ -77,7 +78,7 @@ The following options can be specified in a service block:
 | `change_threshold` | The time (in seconds) that this service must be in a failing state before alerting. Defaults to the global `change_threshold`.
 | `distinct_tags`    | Treat every tag registered as a distinct service, and specify the tag when sending alerts about the failing service. Defaults to false.
 | `ignored_tags`     | Tags to ignore when using `distinct_tags`. Useful when excluding generic tags like "master" that are spread across multiple clusters of the same service.
-| `handlers`         | A list of handlers to send alerts for this service, in the form "type.name". If not specified, the global `default_handlers` setting is used.
+| `handlers`         | A list of handlers to send alerts for this service, in the form `type.name`. If not specified, the global `default_handlers` setting is used.
 
 #### Handler Options
 **stdout**
@@ -98,6 +99,13 @@ The following options can be specified in a service block:
 | ------------------ |------------ |
 | `service_key`      | The PagerDuty api key to use for alerting.
 | `max_retries`      | The maximum number of times to retry after an api failure when alerting. Defaults to 5.
+
+**slack**
+
+|       Option       | Description |
+| ------------------ |------------ |
+| `api_token`        | The Slack api token to use for sending messages.
+| `channel_name`     | The Slack channel name to send alert messages to.
 
 #### Example log output:
 ```
