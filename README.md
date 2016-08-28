@@ -22,12 +22,15 @@ consul_token = "secret"
 
 node_watch = "local"
 service_watch = "global"
+
 change_threshold = 60
+
 log_level = "info"
 
 service "redis" {
   change_threshold = 30
   distinct_tags = true
+  ignored_tags = ["master", "node"]
 }
 
 service "nginx" {
@@ -41,6 +44,7 @@ handler "stdout" "log" {
 handler "email" "admin" {
   recipients = ["admin@example.com"]
 }
+
 handler "pagerduty" "page_ops" {
   service_key = "asdf1234"
   max_retries = 10

@@ -1,12 +1,25 @@
 package main
 
 import (
+	"github.com/hashicorp/consul/api"
 	"reflect"
 	"testing"
 	"time"
 )
 
 const testAlertKVPath = "test"
+
+func testAlertConfig() (*Config, chan *AlertState) {
+	alertCh := make(chan *AlertState)
+
+	config := &Config{
+		Handlers: map[string]AlertHandler{
+			"test": testHandler{alertCh},
+		},
+	}
+
+	return config, alertCh
+}
 
 // Make sure we can properly serialize an AlertState struct to the KV store
 // and read it back
@@ -36,41 +49,20 @@ func TestAlert_tryAlert(t *testing.T) {
 	client, server := testConsul(t)
 	defer server.Stop()
 
-	alertCh := make(chan *AlertState)
+	config, alertCh := testAlertConfig()
 
 	setAlertState(testAlertKVPath, &AlertState{}, client)
 
-	go tryAlert(testAlertKVPath, &WatchOptions{
+	go tryAlert(testAlertKVPath, AlertState{
+		Status: api.HealthCritical,
+	}, &WatchOptions{
 		client: client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
+		config: config,
 	})
 
 	select {
 	case <-alertCh:
 	case <-time.After(1 * time.Second):
 		t.Error("didn't get alert")
-	}
-}
-
-// Make sure we handle the case where the alert state disappears from the KV store
-func TestAlert_alertNotFound(t *testing.T) {
-	client, server := testConsul(t)
-	defer server.Stop()
-
-	alertCh := make(chan *AlertState)
-
-	go tryAlert(testAlertKVPath, &WatchOptions{
-		client: client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
-	})
-
-	select {
-	case alert := <-alertCh:
-		t.Errorf("received alert, but should have got nothing: %v", alert)
-	case <-time.After(1 * time.Second):
 	}
 }

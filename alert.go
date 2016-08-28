@@ -14,6 +14,7 @@ type AlertState struct {
 	Service     string `json:"service"`
 	Tag         string `json:"tag"`
 	LastUpdated int64  `json:"last_updated"`
+	LastAlerted string `json:"last_alerted"`
 	Message     string `json:"message"`
 	Details     string `json:"details"`
 }
@@ -47,13 +48,13 @@ func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 }
 
 // Sets an alert state in at a given K/V path, returns true if succeeded
-func setAlertState(kvPath string, alert *AlertState, client *api.Client) bool {
+func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
 	alert.LastUpdated = time.Now().Unix()
 
 	serialized, err := json.Marshal(alert)
 	if err != nil {
 		log.Errorf("Error forming state for alert in Consul: %s", err)
-		return false
+		return
 	}
 
 	_, err = client.KV().Put(&api.KVPair{
@@ -63,30 +64,59 @@ func setAlertState(kvPath string, alert *AlertState, client *api.Client) bool {
 
 	if err != nil {
 		log.Errorf("Error storing state for alert in Consul: %s", err)
-		return false
+		return
 	}
-	return true
 }
 
-// Sleeps for changeThreshold duration, then alerts if the state has not changed
-func tryAlert(kvPath string, watchOpts *WatchOptions) {
-	time.Sleep(time.Duration(watchOpts.changeThreshold) * time.Second)
-
-	alertState, err := getAlertState(kvPath, watchOpts.client)
+// Waits for changeThreshold duration, then alerts if the LastUpdated time was not
+// updated in the meantime (indicating another alert resetting the timer)
+func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
+	alert, err := getAlertState(kvPath, watchOpts.client)
 
 	if err != nil {
 		log.Error("Error fetching alert state: ", err)
 		return
 	}
 
-	if alertState == nil {
+	// Create a new alert state if there's no pre-existing one
+	if alert == nil {
+		alert = &AlertState{
+			Node:        watchOpts.node,
+			Service:     watchOpts.service,
+			Tag:         watchOpts.tag,
+			LastAlerted: api.HealthPassing,
+		}
+	}
+
+	alert.Status = update.Status
+	alert.Message = update.Message
+	alert.Details = update.Details
+
+	// Set LastUpdated on the alert to reset the timer
+	setAlertState(kvPath, alert, watchOpts.client)
+
+	changeThreshold := watchOpts.config.serviceChangeThreshold(watchOpts.service)
+	log.Debugf("Starting timer for alert: '%s'", update.Message)
+	time.Sleep(time.Duration(changeThreshold) * time.Second)
+
+	alert, err = getAlertState(kvPath, watchOpts.client)
+
+	if err != nil {
+		log.Error("Error fetching alert state: ", err)
+		return
+	}
+
+	if alert == nil {
 		log.Errorf("Alert state not found at path %s", kvPath)
 		return
 	}
 
-	if time.Now().Unix()-int64(watchOpts.changeThreshold) >= alertState.LastUpdated {
-		for _, handler := range watchOpts.handlers {
-			handler.Alert(alertState)
+	// If no new alerts were trigger during the sleep, send the alert to each handler to be processed
+	if time.Now().Unix()-int64(changeThreshold) >= alert.LastUpdated && update.Status != alert.LastAlerted {
+		for _, handler := range watchOpts.config.serviceHandlers(watchOpts.service) {
+			handler.Alert(alert)
 		}
+		alert.LastAlerted = update.Status
+		setAlertState(kvPath, alert, watchOpts.client)
 	}
 }

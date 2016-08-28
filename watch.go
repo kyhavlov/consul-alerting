@@ -23,14 +23,11 @@ type WatchOptions struct {
 	// the service will be used when checking its health.
 	tag string
 
-	// The duration that this service's health must remain stable before being alerted on
-	changeThreshold time.Duration
+	// The config to use for the watch
+	config *Config
 
 	// The Consul client object to use for making requests
 	client *api.Client
-
-	// The list of AlertHandlers to call when an alert happens
-	handlers []AlertHandler
 
 	// A channel to use in order to stop the watch and release its lock.
 	stopCh chan struct{}
@@ -93,14 +90,7 @@ func watch(opts *WatchOptions) {
 
 	// Load previously stored check states for this watch from consul
 	lastCheckStatus := make(map[string]string)
-
-	// Set the default alert state in case there's no pre-existing state
-	alertState := &AlertState{
-		Status:  api.HealthPassing,
-		Node:    opts.node,
-		Service: opts.service,
-		Tag:     opts.tag,
-	}
+	lastAlertStatus := api.HealthPassing
 
 	// Set up a callback to be run when we acquire the lock/gain leadership so we can
 	// load the last check/alert states
@@ -114,16 +104,6 @@ func watch(opts *WatchOptions) {
 		for checkName, checkState := range storedCheckStates {
 			log.Debugf("Loaded check %s for %s, state: %s", checkName, name, checkState.Status)
 			lastCheckStatus[checkName] = checkState.Status
-		}
-
-		alert, err := getAlertState(alertPath, client)
-
-		if err != nil {
-			log.Error("Error loading previous alert state from consul: ", err)
-		}
-
-		if alert != nil {
-			alertState = alert
 		}
 	}
 
@@ -205,6 +185,7 @@ func watch(opts *WatchOptions) {
 			}
 
 			// Update the alert details
+			alert := AlertState{}
 			if mode == NodeWatch {
 				failingChecks := make([]string, 0)
 				for _, check := range checks {
@@ -212,7 +193,7 @@ func watch(opts *WatchOptions) {
 						failingChecks = append(failingChecks, check.Name)
 					}
 				}
-				alertState.Details = fmt.Sprintf("Failing checks: %v", failingChecks)
+				alert.Details = fmt.Sprintf("Failing checks: %v", failingChecks)
 			} else {
 				unhealthyNodes := make([]string, 0)
 				for _, check := range checks {
@@ -220,7 +201,7 @@ func watch(opts *WatchOptions) {
 						unhealthyNodes = append(unhealthyNodes, check.Node)
 					}
 				}
-				alertState.Details = fmt.Sprintf("Unhealthy nodes: %v", unhealthyNodes)
+				alert.Details = fmt.Sprintf("Unhealthy nodes: %v", unhealthyNodes)
 			}
 
 			if success {
@@ -230,13 +211,11 @@ func watch(opts *WatchOptions) {
 
 				// If the alert status changed, try to trigger an alert
 				newStatus := computeHealth(lastCheckStatus)
-				if alertState.Status != newStatus {
-					log.Debugf("%s state changed to %s, attempting alert", name, newStatus)
-					alertState.Status = newStatus
-					alertState.Message = fmt.Sprintf("%s is now %s", name, alertState.Status)
-					if setAlertState(alertPath, alertState, client) {
-						go tryAlert(alertPath, opts)
-					}
+				if lastAlertStatus != newStatus {
+					lastAlertStatus = newStatus
+					alert.Status = newStatus
+					alert.Message = fmt.Sprintf("%s is now %s", name, newStatus)
+					go tryAlert(alertPath, alert, opts)
 				}
 			}
 		}

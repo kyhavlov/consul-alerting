@@ -16,7 +16,7 @@ vet:
 	@go vet
 
 test: fmt vet
-	@go test -v
+	@go test -v -timeout 300s
 
 bootstrap:
 	@for tool in  $(EXTERNAL_TOOLS) ; do \

@@ -68,7 +68,7 @@ func ParseConfig(raw string) (*Config, error) {
 
 	list = list.Children()
 
-	// Decode the full thing into a map[string]interface for ease
+	// Decode the full thing into a map[string]interface for ease of use
 	var config Config
 	var m map[string]interface{}
 	if err := hcl.DecodeObject(&m, list); err != nil {
@@ -77,7 +77,7 @@ func ParseConfig(raw string) (*Config, error) {
 	delete(m, "service")
 	delete(m, "handler")
 
-	// Set defaults
+	// Set defaults for unset keys
 	defaultConfig := map[string]interface{}{
 		"consul_address":   "localhost:8500",
 		"node_watch":       "local",
@@ -91,11 +91,12 @@ func ParseConfig(raw string) (*Config, error) {
 		}
 	}
 
-	// Decode the rest
+	// Decode the simple (non service/handler) objects into Config
 	if err := mapstructure.WeakDecode(&m, &config); err != nil {
 		return nil, err
 	}
 
+	// Use parser function for service blocks
 	config.Services = make(map[string]ServiceConfig)
 	if obj := list.Filter("service"); len(obj.Items) > 0 {
 		err = parseServices(obj, &config)
@@ -104,6 +105,7 @@ func ParseConfig(raw string) (*Config, error) {
 		}
 	}
 
+	// Use parser function for handler blocks
 	config.Handlers = make(map[string]AlertHandler)
 	if obj := list.Filter("handler"); len(obj.Items) > 0 {
 		err = parseHandlers(obj, &config)
@@ -188,6 +190,8 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 			}
 		}
 
+		// Decode based on the handler type.
+		// TODO: look into a more compact way to do this when we have more handlers
 		switch handlerType {
 		case "stdout":
 			var handler StdoutHandler
@@ -217,18 +221,31 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 	return nil
 }
 
-func (config *Config) getServiceConfig(name string) *ServiceConfig {
-	if service, ok := config.Services[name]; ok {
-		return &service
+func (config *Config) serviceConfig(service string) *ServiceConfig {
+	if s, ok := config.Services[service]; ok {
+		return &s
 	} else {
 		return nil
 	}
 }
 
-func (c *Config) getServiceHandlers(service string) []AlertHandler {
+func (c *Config) serviceHandlers(service string) []AlertHandler {
 	handlers := make([]AlertHandler, 0)
 	for _, handler := range c.Handlers {
 		handlers = append(handlers, handler)
 	}
 	return handlers
+}
+
+// Compute the changeThreshold for alerts on a service, defaulting to the global threshold
+// if no config for the service is specified
+func (c *Config) serviceChangeThreshold(service string) int {
+	changeThreshold := c.ChangeThreshold
+
+	// Override the global changeThreshold config if we have a service-specific one
+	if c.serviceConfig(service) != nil {
+		changeThreshold = c.serviceConfig(service).ChangeThreshold
+	}
+
+	return changeThreshold
 }

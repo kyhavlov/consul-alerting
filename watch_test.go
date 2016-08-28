@@ -44,14 +44,12 @@ func TestWatch_alertService(t *testing.T) {
 	// Add a service with passing health
 	server.AddService(testServiceName, structs.HealthPassing, nil)
 
-	alertCh := make(chan *AlertState)
+	config, alertCh := testAlertConfig()
 
 	go watch(&WatchOptions{
 		service: testServiceName,
 		client:  client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
+		config:  config,
 	})
 
 	<-time.After(1 * time.Second)
@@ -89,14 +87,12 @@ func TestWatch_alertNode(t *testing.T) {
 	// Create a node check
 	server.AddCheck(testNodeCheckName, "", structs.HealthPassing)
 
-	alertCh := make(chan *AlertState)
+	config, alertCh := testAlertConfig()
 
 	go watch(&WatchOptions{
 		node:   server.Config.NodeName,
 		client: client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
+		config: config,
 	})
 
 	<-time.After(1 * time.Second)
@@ -136,15 +132,13 @@ func TestWatch_changeThreshold(t *testing.T) {
 
 	alertCh := make(chan *AlertState)
 
-	changeThreshold := 5 * time.Second
+	config, alertCh := testAlertConfig()
+	config.ChangeThreshold = 5
 
 	go watch(&WatchOptions{
-		service:         testServiceName,
-		changeThreshold: changeThreshold,
-		client:          client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
+		service: testServiceName,
+		client:  client,
+		config:  config,
 	})
 
 	<-time.After(1 * time.Second)
@@ -164,7 +158,7 @@ func TestWatch_changeThreshold(t *testing.T) {
 		t.Fatalf("received an alert when we should have received nothing: %v", alert)
 
 	// If we got nothing after changeThreshold seconds, success
-	case <-time.After(changeThreshold):
+	case <-time.After(time.Duration(config.ChangeThreshold) * time.Second):
 	}
 }
 
@@ -176,14 +170,12 @@ func TestWatch_multipleWatch(t *testing.T) {
 	// Add a service with passing health
 	server.AddService(testServiceName, structs.HealthPassing, nil)
 
-	alertCh := make(chan *AlertState, 2)
+	config, alertCh := testAlertConfig()
 
 	opts := &WatchOptions{
 		service: testServiceName,
 		client:  client,
-		handlers: []AlertHandler{
-			testHandler{alertCh},
-		},
+		config:  config,
 	}
 
 	go watch(opts)
@@ -219,6 +211,6 @@ func TestWatch_multipleWatch(t *testing.T) {
 	select {
 	case alert := <-alertCh:
 		t.Fatalf("got unexpected extra alert: %v", alert)
-	default:
+	case <-time.After(1 * time.Second):
 	}
 }

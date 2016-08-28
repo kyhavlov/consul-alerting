@@ -59,13 +59,7 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 		// Compare the new list of services with our stored one to see if we need to
 		// spawn any new watches
 		for service, tags := range currentServices {
-			serviceConfig := config.getServiceConfig(service)
-
-			// Override the global changeThreshold config if we have a service-specific one
-			changeThreshold := config.ChangeThreshold
-			if serviceConfig != nil {
-				changeThreshold = serviceConfig.ChangeThreshold
-			}
+			serviceConfig := config.serviceConfig(service)
 
 			// See if we found a new service
 			if _, ok := services[service]; !ok {
@@ -77,12 +71,11 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 					for _, tag := range tags {
 						if !contains(serviceConfig.IgnoredTags, tag) {
 							watchOpts := &WatchOptions{
-								service:         service,
-								tag:             tag,
-								changeThreshold: time.Duration(changeThreshold),
-								client:          client,
-								handlers:        config.getServiceHandlers(service),
-								stopCh:          shutdownOpts.stopCh,
+								service: service,
+								tag:     tag,
+								config:  config,
+								client:  client,
+								stopCh:  shutdownOpts.stopCh,
 							}
 							shutdownOpts.count++
 							go watch(watchOpts)
@@ -91,11 +84,10 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 				} else {
 					// If it isn't, just start one watch for the service
 					watchOpts := &WatchOptions{
-						service:         service,
-						changeThreshold: time.Duration(changeThreshold),
-						client:          client,
-						handlers:        config.getServiceHandlers(service),
-						stopCh:          shutdownOpts.stopCh,
+						service: service,
+						config:  config,
+						client:  client,
+						stopCh:  shutdownOpts.stopCh,
 					}
 					shutdownOpts.count++
 					go watch(watchOpts)
@@ -108,12 +100,11 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 					for _, tag := range tags {
 						if !contains(serviceConfig.IgnoredTags, tag) && !contains(services[service], tag) {
 							go watch(&WatchOptions{
-								service:         service,
-								tag:             tag,
-								changeThreshold: time.Duration(changeThreshold),
-								client:          client,
-								handlers:        config.getServiceHandlers(service),
-								stopCh:          shutdownOpts.stopCh,
+								service: service,
+								tag:     tag,
+								config:  config,
+								client:  client,
+								stopCh:  shutdownOpts.stopCh,
 							})
 							shutdownOpts.count++
 						}
@@ -154,11 +145,10 @@ func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Clien
 			if !contains(nodes, nodeName) {
 				log.Infof("Discovered new node: %s", nodeName)
 				opts := &WatchOptions{
-					node:            nodeName,
-					changeThreshold: time.Duration(config.ChangeThreshold),
-					client:          client,
-					handlers:        config.getServiceHandlers(""),
-					stopCh:          shutdownOpts.stopCh,
+					node:   nodeName,
+					config: config,
+					client: client,
+					stopCh: shutdownOpts.stopCh,
 				}
 				shutdownOpts.count++
 				nodes = append(nodes, nodeName)

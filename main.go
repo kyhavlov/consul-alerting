@@ -105,11 +105,10 @@ func main() {
 		log.Infof("Monitoring local node (%s)'s checks", nodeName)
 		// We're in local mode so we don't need to discover the local node; it won't change
 		opts := &WatchOptions{
-			node:            nodeName,
-			changeThreshold: time.Duration(config.ChangeThreshold),
-			client:          client,
-			handlers:        config.getServiceHandlers(""),
-			stopCh:          shutdownOpts.stopCh,
+			node:   nodeName,
+			config: config,
+			client: client,
+			stopCh: shutdownOpts.stopCh,
 		}
 		shutdownOpts.count++
 		go watch(opts)
