@@ -68,8 +68,8 @@ func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
 	}
 }
 
-// Waits for changeThreshold duration, then alerts if the LastUpdated time was not
-// updated in the meantime (indicating another alert resetting the timer)
+// Waits for changeThreshold duration, then alerts if LastUpdated has not
+// changed in the meantime (which would indicate another alert resetting the timer)
 func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	alert, err := getAlertState(kvPath, watchOpts.client)
 
@@ -111,7 +111,7 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 		return
 	}
 
-	// If no new alerts were trigger during the sleep, send the alert to each handler to be processed
+	// If no new alerts were triggered during the sleep, send the alert to each handler to be processed
 	if time.Now().Unix()-int64(changeThreshold) >= alert.LastUpdated && update.Status != alert.LastAlerted {
 		for _, handler := range watchOpts.config.serviceHandlers(watchOpts.service) {
 			handler.Alert(alert)

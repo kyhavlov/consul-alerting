@@ -23,7 +23,8 @@ func TestConfig_missingFile(t *testing.T) {
 func TestConfig_correctValues(t *testing.T) {
 	configString := `
 	consul_address = "localhost:8500"
-	token = "test_token"
+	consul_token = "test_token"
+	datacenter = "testdc"
 
 	node_watch = "local"
 	service_watch = "global"
@@ -68,13 +69,14 @@ func TestConfig_correctValues(t *testing.T) {
 	}
 
 	expected := &Config{
-		ConsulAddress:   "localhost:8500",
-		ConsulToken:     "test_token",
-		NodeWatch:       "local",
-		ServiceWatch:    "global",
-		ChangeThreshold: 30,
-		DefaultHandlers: []string{"stdout.warn", "email.admin"},
-		LogLevel:        "warn",
+		ConsulAddress:    "localhost:8500",
+		ConsulToken:      "test_token",
+		ConsulDatacenter: "testdc",
+		NodeWatch:        "local",
+		ServiceWatch:     "global",
+		ChangeThreshold:  30,
+		DefaultHandlers:  []string{"stdout.warn", "email.admin"},
+		LogLevel:         "warn",
 		Services: map[string]ServiceConfig{
 			"redis": ServiceConfig{
 				Name:            "redis",

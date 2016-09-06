@@ -102,7 +102,7 @@ func TestAlert_defaultHandler(t *testing.T) {
 }
 
 // Set up two handlers but configure the service to only alert on one
-func TestAlert_specifyHandler(t *testing.T) {
+func TestAlert_serviceHandler(t *testing.T) {
 	client, server := testConsul(t)
 	defer server.Stop()
 

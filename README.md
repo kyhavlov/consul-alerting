@@ -19,6 +19,7 @@ The Consul Alerting configuration files are written in [HashiCorp Configuration 
 ```hcl
 consul_address = "localhost:8500"
 consul_token = "secret"
+datacenter = "prod-1"
 
 node_watch = "local"
 service_watch = "global"
@@ -62,8 +63,9 @@ handler "slack" "dev_channel" {
 
 |       Option       | Description |
 | ------------------ |------------ |
-| `consul_address`   | The address of the consul agent to connect to. Defaults to `localhost:8500`.
-| `token`            | The [Consul API token][Consul ACLs]. There is no default value.
+| `consul_address`   | The address of the Consul agent to connect to. Defaults to `localhost:8500`.
+| `consul_token`     | The [Consul API token][Consul ACLs]. There is no default value.
+| `datacenter`       | The datacenter name to use in alerts. Defaults to the datacenter of the Consul agent.
 | `node_watch`       | The setting to use for discovering nodes. If set to `local`, only the local node's health will be watched. If set to `global`, all nodes in the catalog will be watched. Defaults to `local`.
 | `service_watch`    | The setting to use for discovering services. If set to `local`, only services on the local node will be watch. If set to `global`, all services in the catalog will be watched. Defaults to `local`.
 | `change_threshold` | The time (in seconds) that a check must be in a failing state before alerting. Defaults to 60.
@@ -111,6 +113,7 @@ The following options can be specified in a service block:
 ```
 [Aug 27 19:03:46]  INFO Loaded handler: stdout.log
 [Aug 27 19:03:46]  INFO Using Consul agent at 192.168.1.3:8500
+[Aug 27 19:03:46]  INFO Using datacenter: dc1
 [Aug 27 19:03:46]  INFO Monitoring local node (consul)'s checks
 [Aug 27 19:03:46]  INFO Discovering services from catalog
 [Aug 27 19:03:46]  INFO Waiting to acquire lock on node consul...

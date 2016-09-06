@@ -14,14 +14,15 @@ const LocalMode = "local"
 const GlobalMode = "global"
 
 type Config struct {
-	ConsulAddress   string   `mapstructure:"consul_address"`
-	ConsulToken     string   `mapstructure:"token"`
-	DevMode         bool     `mapstructure:"dev_mode"`
-	NodeWatch       string   `mapstructure:"node_watch"`
-	ServiceWatch    string   `mapstructure:"service_watch"`
-	ChangeThreshold int      `mapstructure:"change_threshold"`
-	DefaultHandlers []string `mapstructure:"default_handlers"`
-	LogLevel        string   `mapstructure:"log_level"`
+	ConsulAddress    string   `mapstructure:"consul_address"`
+	ConsulToken      string   `mapstructure:"consul_token"`
+	ConsulDatacenter string   `mapstructure:"datacenter"`
+	DevMode          bool     `mapstructure:"dev_mode"`
+	NodeWatch        string   `mapstructure:"node_watch"`
+	ServiceWatch     string   `mapstructure:"service_watch"`
+	ChangeThreshold  int      `mapstructure:"change_threshold"`
+	DefaultHandlers  []string `mapstructure:"default_handlers"`
+	LogLevel         string   `mapstructure:"log_level"`
 
 	Services map[string]ServiceConfig
 	Handlers map[string]AlertHandler

@@ -214,7 +214,7 @@ func watch(opts *WatchOptions) {
 				if lastAlertStatus != newStatus {
 					lastAlertStatus = newStatus
 					alert.Status = newStatus
-					alert.Message = fmt.Sprintf("%s is now %s", name, newStatus)
+					alert.Message = fmt.Sprintf("[%s] %s is now %s", opts.config.ConsulDatacenter, name, newStatus)
 					go tryAlert(alertPath, alert, opts)
 				}
 			}

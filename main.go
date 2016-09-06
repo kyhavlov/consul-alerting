@@ -91,6 +91,21 @@ func main() {
 		time.Sleep(10 * time.Second)
 	}
 
+	// Get datacenter info if it wasn't specified in the config
+	if config.ConsulDatacenter == "" {
+		agentInfo, err := client.Agent().Self()
+
+		for err != nil {
+			agentInfo, err = client.Agent().Self()
+			log.Error("Error fetching datacenter from Consul: ", err)
+			log.Error("Retrying in 10s...")
+			time.Sleep(10 * time.Second)
+		}
+
+		config.ConsulDatacenter = agentInfo["Config"]["Datacenter"].(string)
+	}
+	log.Info("Using datacenter: ", config.ConsulDatacenter)
+
 	if config.DevMode {
 		registerTestServices(client)
 	}
