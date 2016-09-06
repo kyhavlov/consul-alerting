@@ -111,39 +111,34 @@ The following options can be specified in a service block:
 
 #### Example log output:
 ```
-[Aug 27 19:03:46]  INFO Loaded handler: stdout.log
-[Aug 27 19:03:46]  INFO Using Consul agent at 192.168.1.3:8500
-[Aug 27 19:03:46]  INFO Using datacenter: dc1
-[Aug 27 19:03:46]  INFO Monitoring local node (consul)'s checks
-[Aug 27 19:03:46]  INFO Discovering services from catalog
-[Aug 27 19:03:46]  INFO Waiting to acquire lock on node consul...
-[Aug 27 19:03:46]  INFO Service found: redis, tags: [alpha beta]
-[Aug 27 19:03:46]  INFO Service found: consul, tags: []
-[Aug 27 19:03:46]  INFO Service found: nginx, tags: [gamma delta]
-[Aug 27 19:03:46]  INFO Waiting to acquire lock on service redis (tag: alpha)...
-[Aug 27 19:03:46]  INFO Waiting to acquire lock on service nginx...
-[Aug 27 19:03:46]  INFO Waiting to acquire lock on service consul...
-[Aug 27 19:03:46]  INFO Waiting to acquire lock on service redis (tag: beta)...
-[Aug 27 19:03:46]  INFO Acquired lock for node consul
-[Aug 27 19:03:46]  INFO Acquired lock for service consul
-[Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: beta)
-[Aug 27 19:03:46]  INFO Acquired lock for service nginx
-[Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: alpha)
-[Aug 27 19:04:22]  WARN dc1: service nginx is now critical
-[Aug 27 19:04:22]  WARN Failing checks:
-[Aug 27 19:04:22]  WARN => (node) consul
-[Aug 27 19:04:22]  WARN ==> (check) Service 'nginx' check:
-[Aug 27 19:04:22]  WARN example check output (fail)
-[Aug 27 19:04:28]  WARN dc1: service nginx is now passing
-[Aug 27 19:04:35]  WARN dc1: service nginx is now warning
-[Aug 27 19:04:35]  WARN Failing checks:
-[Aug 27 19:04:35]  WARN => (node) consul
-[Aug 27 19:04:35]  WARN ==> (check) Service 'nginx' check:
-[Aug 27 19:04:35]  WARN example check output (warn)
-[Aug 27 19:04:36]  WARN dc1: node consul is now warning
-[Aug 27 19:04:36]  WARN Failing checks:
-[Aug 27 19:04:36]  WARN => (check) memory usage:
-[Aug 27 19:04:36]  WARN example check output (warn)
+[Sep  6 01:42:41]  INFO Loaded handler: stdout.log
+[Sep  6 01:42:41]  INFO Using Consul agent at 192.168.1.3:8500
+[Sep  6 01:42:41]  INFO Using datacenter: dc1
+[Sep  6 01:42:41]  INFO Monitoring local node (consul)'s checks
+[Sep  6 01:42:41]  INFO Discovering services from catalog
+[Sep  6 01:42:41]  INFO Waiting to acquire lock on node consul...
+[Sep  6 01:42:41]  INFO Service found: consul, tags: []
+[Sep  6 01:42:41]  INFO Service found: nginx, tags: [gamma delta]
+[Sep  6 01:42:41]  INFO Service found: redis, tags: [alpha beta]
+[Sep  6 01:42:41]  INFO Waiting to acquire lock on service nginx...
+[Sep  6 01:42:41]  INFO Waiting to acquire lock on service redis (tag: beta)...
+[Sep  6 01:42:41]  INFO Waiting to acquire lock on service redis (tag: alpha)...
+[Sep  6 01:42:41]  INFO Waiting to acquire lock on service consul...
+[Sep  6 01:42:41]  INFO Acquired lock for service consul
+[Sep  6 01:42:41]  INFO Acquired lock for node consul
+[Sep  6 01:42:41]  INFO Acquired lock for service redis (tag: beta)
+[Sep  6 01:42:41]  INFO Acquired lock for service nginx
+[Sep  6 01:42:41]  INFO Acquired lock for service redis (tag: alpha)
+[Sep  6 01:42:47]  WARN dc1: service nginx is now warning
+[Sep  6 01:42:47]  WARN Failing checks:
+[Sep  6 01:42:47]  WARN => (node) consul
+[Sep  6 01:42:47]  WARN ==> (check) Service 'nginx' check:
+[Sep  6 01:42:47]  WARN example warning check output
+[Sep  6 01:43:02]  WARN dc1: service nginx is now passing
+[Sep  6 01:43:31]  WARN dc1: node consul is now warning
+[Sep  6 01:43:31]  WARN Failing checks:
+[Sep  6 01:43:31]  WARN => (check) memory usage:
+[Sep  6 01:43:31]  WARN example warning check output
 ```
 
 [HCL]: https://github.com/hashicorp/hcl "HashiCorp Configuration Language (HCL)"

@@ -191,7 +191,7 @@ func registerTestServices(client *api.Client) {
 			case 2:
 				health = "fail"
 			}
-			err := client.Agent().UpdateTTL(name, "example check output ("+health+")", health)
+			err := client.Agent().UpdateTTL(name, "example " + health + "ing check output", health)
 			if err != nil {
 				log.Error(err)
 			}
@@ -206,7 +206,7 @@ func registerTestServices(client *api.Client) {
 	})
 	go fluctuateCheck("memory usage", 10*time.Second)
 
-	/*client.Agent().ServiceRegister(&api.AgentServiceRegistration{
+	client.Agent().ServiceRegister(&api.AgentServiceRegistration{
 		Name: "redis",
 		Tags: []string{"alpha", "beta"},
 		Port: 2000,
@@ -224,5 +224,5 @@ func registerTestServices(client *api.Client) {
 			TTL: "10m",
 		},
 	})
-	go fluctuateCheck("service:nginx", 7*time.Second)*/
+	go fluctuateCheck("service:nginx", 8*time.Second)
 }
