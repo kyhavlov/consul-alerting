@@ -23,20 +23,25 @@ type StdoutHandler struct {
 }
 
 func (s StdoutHandler) Alert(alert *AlertState) {
-	text := fmt.Sprintf("%s (%s)", alert.Message, alert.Details)
-	switch strings.ToLower(s.LogLevel) {
-	case "panic":
-		log.Panic(text)
-	case "fatal":
-		log.Fatal(text)
-	case "error":
-		log.Error(text)
-	case "warn", "warning":
-		log.Warn(text)
-	case "info":
-		log.Info(text)
-	case "debug":
-		log.Debug(text)
+	text := []string{alert.Message}
+	if alert.Details != "" {
+		text = append(text, strings.Split(alert.Details, "\n")...)
+	}
+	for _, line := range text {
+		switch strings.ToLower(s.LogLevel) {
+		case "panic":
+			log.Panic(line)
+		case "fatal":
+			log.Fatal(line)
+		case "error":
+			log.Error(line)
+		case "warn", "warning":
+			log.Warn(line)
+		case "info":
+			log.Info(line)
+		case "debug":
+			log.Debug(line)
+		}
 	}
 }
 

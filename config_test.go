@@ -20,7 +20,7 @@ func TestConfig_missingFile(t *testing.T) {
 	}
 }
 
-func TestConfig_correctValues(t *testing.T) {
+func TestConfig_parseValues(t *testing.T) {
 	configString := `
 	consul_address = "localhost:8500"
 	consul_token = "test_token"

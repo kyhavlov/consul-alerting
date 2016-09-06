@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -13,7 +15,7 @@ type AlertState struct {
 	Node        string `json:"node"`
 	Service     string `json:"service"`
 	Tag         string `json:"tag"`
-	LastUpdated int64  `json:"last_updated"`
+	UpdateIndex int64  `json:"update_index"`
 	LastAlerted string `json:"last_alerted"`
 	Message     string `json:"message"`
 	Details     string `json:"details"`
@@ -49,8 +51,6 @@ func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 
 // Sets an alert state in at a given K/V path, returns true if succeeded
 func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
-	alert.LastUpdated = time.Now().Unix()
-
 	serialized, err := json.Marshal(alert)
 	if err != nil {
 		log.Errorf("Error forming state for alert in Consul: %s", err)
@@ -71,6 +71,8 @@ func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
 // Waits for changeThreshold duration, then alerts if LastUpdated has not
 // changed in the meantime (which would indicate another alert resetting the timer)
 func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
+	// Lock the mutex while reading or writing the alert state to avoid race conditions
+	watchOpts.alertLock.Lock()
 	alert, err := getAlertState(kvPath, watchOpts.client)
 
 	if err != nil {
@@ -92,13 +94,19 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	alert.Message = update.Message
 	alert.Details = update.Details
 
+	// Increment the update index and store it, so we can check later to see if it changed
+	alert.UpdateIndex++
+	updateIndex := alert.UpdateIndex
+
 	// Set LastUpdated on the alert to reset the timer
 	setAlertState(kvPath, alert, watchOpts.client)
+	watchOpts.alertLock.Unlock()
 
 	changeThreshold := watchOpts.config.serviceChangeThreshold(watchOpts.service)
 	log.Debugf("Starting timer for alert: '%s'", update.Message)
 	time.Sleep(time.Duration(changeThreshold) * time.Second)
 
+	watchOpts.alertLock.Lock()
 	alert, err = getAlertState(kvPath, watchOpts.client)
 
 	if err != nil {
@@ -112,11 +120,56 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	}
 
 	// If no new alerts were triggered during the sleep, send the alert to each handler to be processed
-	if time.Now().Unix()-int64(changeThreshold) >= alert.LastUpdated && update.Status != alert.LastAlerted {
+	if alert.UpdateIndex == updateIndex && update.Status != alert.LastAlerted {
 		for _, handler := range watchOpts.config.serviceHandlers(watchOpts.service) {
 			handler.Alert(alert)
 		}
 		alert.LastAlerted = update.Status
 		setAlertState(kvPath, alert, watchOpts.client)
 	}
+	watchOpts.alertLock.Unlock()
+}
+
+// Returns each failing check and its output
+func nodeDetails(checks []*api.HealthCheck) string {
+	details := ""
+
+	for _, check := range checks {
+		if check.ServiceID == "" && (check.Status == api.HealthCritical || check.Status == api.HealthWarning) {
+			details = details + fmt.Sprintf("=> (check) %s:\n%s", check.Name, check.Output)
+		}
+	}
+
+	// Only set details if we have failing checks
+	if details != "" {
+		details = "Failing checks:\n" + details
+	}
+
+	return strings.TrimSpace(details)
+}
+
+// Returns each failing check and its output, grouped by node
+func serviceDetails(checks []*api.HealthCheck) string {
+	details := ""
+	// Make a map for combining the failing health check outputs on each node
+	nodeStatuses := make(map[string]string)
+
+	for _, check := range checks {
+		if check.Status == api.HealthCritical || check.Status == api.HealthWarning {
+			if _, ok := nodeStatuses[check.Node]; !ok {
+				nodeStatuses[check.Node] = ""
+			}
+			nodeStatuses[check.Node] = nodeStatuses[check.Node] + fmt.Sprintf("==> (check) %s:\n%s", check.Name, check.Output)
+		}
+	}
+
+	// Only set details if we have failing checks
+	if len(nodeStatuses) > 0 {
+		details = "Failing checks:\n"
+		for node, status := range nodeStatuses {
+			details = details + fmt.Sprintf("=> (node) %s\n%s", node, status)
+		}
+	}
+
+	return strings.TrimSpace(details)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/hashicorp/consul/api"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -54,8 +55,9 @@ func TestAlert_tryAlert(t *testing.T) {
 	go tryAlert(testAlertKVPath, AlertState{
 		Status: api.HealthCritical,
 	}, &WatchOptions{
-		client: client,
-		config: config,
+		client:    client,
+		config:    config,
+		alertLock: &sync.Mutex{},
 	})
 
 	select {
@@ -84,8 +86,9 @@ func TestAlert_defaultHandler(t *testing.T) {
 	go tryAlert(testAlertKVPath, AlertState{
 		Status: api.HealthCritical,
 	}, &WatchOptions{
-		client: client,
-		config: config,
+		client:    client,
+		config:    config,
+		alertLock: &sync.Mutex{},
 	})
 
 	select {
@@ -125,9 +128,10 @@ func TestAlert_serviceHandler(t *testing.T) {
 	go tryAlert(testAlertKVPath, AlertState{
 		Status: api.HealthCritical,
 	}, &WatchOptions{
-		service: testServiceName,
-		client:  client,
-		config:  config,
+		service:   testServiceName,
+		client:    client,
+		config:    config,
+		alertLock: &sync.Mutex{},
 	})
 
 	select {

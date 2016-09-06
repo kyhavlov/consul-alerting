@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
@@ -178,31 +179,50 @@ func shutdown(client *api.Client, config *Config, opts *ShutdownOpts) {
 }
 
 func registerTestServices(client *api.Client) {
+	fluctuateCheck := func(name string, interval time.Duration) {
+		for {
+			status := rand.Intn(6) / 3
+			health := ""
+			switch status {
+			case 0:
+				health = "pass"
+			case 1:
+				health = "warn"
+			case 2:
+				health = "fail"
+			}
+			err := client.Agent().UpdateTTL(name, "example check output ("+health+")", health)
+			if err != nil {
+				log.Error(err)
+			}
+			time.Sleep(interval)
+		}
+	}
 	client.Agent().CheckRegister(&api.AgentCheckRegistration{
 		Name: "memory usage",
 		AgentServiceCheck: api.AgentServiceCheck{
-			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "10s",
+			TTL: "10m",
 		},
 	})
+	go fluctuateCheck("memory usage", 10*time.Second)
 
-	client.Agent().ServiceRegister(&api.AgentServiceRegistration{
+	/*client.Agent().ServiceRegister(&api.AgentServiceRegistration{
 		Name: "redis",
 		Tags: []string{"alpha", "beta"},
 		Port: 2000,
 		Check: &api.AgentServiceCheck{
-			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "10s",
+			TTL: "10m",
 		},
 	})
+	go fluctuateCheck("service:redis", 10*time.Second)
 
 	client.Agent().ServiceRegister(&api.AgentServiceRegistration{
 		Name: "nginx",
 		Tags: []string{"gamma", "delta"},
 		Port: 3000,
 		Check: &api.AgentServiceCheck{
-			Script:   "exit $(shuf -i 0-2 -n 1)",
-			Interval: "8s",
+			TTL: "10m",
 		},
 	})
+	go fluctuateCheck("service:nginx", 7*time.Second)*/
 }

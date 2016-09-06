@@ -129,13 +129,21 @@ The following options can be specified in a service block:
 [Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: beta)
 [Aug 27 19:03:46]  INFO Acquired lock for service nginx
 [Aug 27 19:03:46]  INFO Acquired lock for service redis (tag: alpha)
-[Aug 27 19:04:01]  WARN service nginx is now warning (Unhealthy nodes: [consul])
-[Aug 27 19:04:04]  WARN node consul is now warning (Failing checks: [memory usage])
-[Aug 27 19:04:19]  WARN service nginx is now critical (Unhealthy nodes: [consul])
-[Aug 27 19:04:27]  WARN service redis (tag: alpha) is now critical (Unhealthy nodes: [consul])
-[Aug 27 19:05:07]  WARN service redis (tag: beta) is now critical (Unhealthy nodes: [consul])
-[Aug 27 19:05:07]  WARN service nginx is now warning (Unhealthy nodes: [consul])
-[Aug 27 19:05:25]  WARN service nginx is now critical (Unhealthy nodes: [consul])
+[Aug 27 19:04:22]  WARN dc1: service nginx is now critical
+[Aug 27 19:04:22]  WARN Failing checks:
+[Aug 27 19:04:22]  WARN => (node) consul
+[Aug 27 19:04:22]  WARN ==> (check) Service 'nginx' check:
+[Aug 27 19:04:22]  WARN example check output (fail)
+[Aug 27 19:04:28]  WARN dc1: service nginx is now passing
+[Aug 27 19:04:35]  WARN dc1: service nginx is now warning
+[Aug 27 19:04:35]  WARN Failing checks:
+[Aug 27 19:04:35]  WARN => (node) consul
+[Aug 27 19:04:35]  WARN ==> (check) Service 'nginx' check:
+[Aug 27 19:04:35]  WARN example check output (warn)
+[Aug 27 19:04:36]  WARN dc1: node consul is now warning
+[Aug 27 19:04:36]  WARN Failing checks:
+[Aug 27 19:04:36]  WARN => (check) memory usage:
+[Aug 27 19:04:36]  WARN example check output (warn)
 ```
 
 [HCL]: https://github.com/hashicorp/hcl "HashiCorp Configuration Language (HCL)"

@@ -6,6 +6,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/hashicorp/consul/api"
+	"sync"
 )
 
 const watchWaitTime = 15 * time.Second
@@ -29,6 +30,9 @@ type WatchOptions struct {
 	// The Consul client object to use for making requests
 	client *api.Client
 
+	// A lock to use for avoiding race conditions with quiescence timers when alerting
+	alertLock *sync.Mutex
+
 	// A channel to use in order to stop the watch and release its lock.
 	stopCh chan struct{}
 }
@@ -43,15 +47,15 @@ endpoint for the node/service.
 
 The general workflow for a watch is:
 1. Block until acquiring the lock
-2. Upon acquiring the lock, read the previous check/alert state from the Consul K/V store
+2. Upon acquiring the lock, read the previous checks/alert state from the Consul K/V store into the local cache
 3. While we have the lock, loop through the following:
 	- Do a blocking query for up to watchWaitTime to get new health check updates
 	- Compare the returned health checks to the local cache to see if any changed
 	- If we got relevant health check updates (checks for our specific service tag, for example)
-	  then see if that changes the overall service/node health
-	- If it does, try to alert with the latest info for this node/service. At this point we spawn
+	  see if they affect the overall service/node health
+	- If they do, try to alert with the latest info for this node/service. At this point we spawn
 	  a goroutine to wait for changeThreshold seconds before firing an alert if the status stays
-	  stable, and go back to the beginning of 3.
+	  stable, and go back to the beginning of #3.
 
 This ensures that only one process can manage the alerts for a node/service at any given time, and
 that the check/alert state is persisted across restarts/lock acquisitions.
@@ -63,6 +67,8 @@ func watch(opts *WatchOptions) {
 		AllowStale: true,
 		WaitTime:   watchWaitTime,
 	}
+
+	opts.alertLock = &sync.Mutex{}
 
 	// Figure out whether we're watching a node or service
 	mode := NodeWatch
@@ -171,8 +177,8 @@ func watch(opts *WatchOptions) {
 		updates := diffCheckFunc(checks, lastCheckStatus, opts)
 
 		// If there's any health check status changes, try to update the remote/local check caches and
-		// see if the alert status changed. If it has, we want to start a quiescence timer that will
-		// alert if it lives past the changeThreshold
+		// see if the alert status changed. If it has, we start a quiescence timer that will alert if
+		// it lives past the changeThreshold
 		if len(updates) > 0 {
 			success := true
 
@@ -184,24 +190,12 @@ func watch(opts *WatchOptions) {
 				}
 			}
 
-			// Update the alert details
+			// Update the alert details to include info about any failing checks
 			alert := AlertState{}
 			if mode == NodeWatch {
-				failingChecks := make([]string, 0)
-				for _, check := range checks {
-					if check.ServiceID == "" && (check.Status == api.HealthCritical || check.Status == api.HealthWarning) {
-						failingChecks = append(failingChecks, check.Name)
-					}
-				}
-				alert.Details = fmt.Sprintf("Failing checks: %v", failingChecks)
+				alert.Details = nodeDetails(checks)
 			} else {
-				unhealthyNodes := make([]string, 0)
-				for _, check := range checks {
-					if check.Status == api.HealthCritical || check.Status == api.HealthWarning {
-						unhealthyNodes = append(unhealthyNodes, check.Node)
-					}
-				}
-				alert.Details = fmt.Sprintf("Unhealthy nodes: %v", unhealthyNodes)
+				alert.Details = serviceDetails(checks)
 			}
 
 			if success {
