@@ -2,10 +2,16 @@ Consul Alerting
 ================
 [![Build Status](https://travis-ci.org/kyhavlov/consul-alerting.svg?branch=master)](https://travis-ci.org/kyhavlov/consul-alerting)
 
-This project provides a daemon to run alongside Consul and alert on health check failures. It can be configured to watch only local service and node health checks, or to use the catalog to monitor all services/checks. It distributes the alerting load by acquiring individual locks on the nodes/services it is monitoring, allowing daemons on different nodes to share the work and to pick up monitoring for one another in the event of node failure.
+This project provides a daemon to run alongside Consul and alert on health check failures. It can be configured to watch only local service and node health checks, or to use the catalog to monitor all services/checks. It distributes the alerting load by acquiring individual locks on the nodes/services it is monitoring, allowing daemons on different hosts to share the work and to pick up monitoring for one another in the event of node failure.
+
+The Consul key/value store is used for storing persistent state about alerts; in the event of a process being restarted or lock ownership changing, the information about the last alert sent for a given service/node is preserved. This is to avoid sending duplicate alerts and leaving hanging alerts that never resolve. Only the most recently known state is held in the KV store for comparisons so that the usage does not increase over time.
 
 Usage
 -----
+
+### Discovery Modes
+
+The scope of both the services and nodes to monitor can be configured via the `service_watch` and `node_watch` config parameters respectively. In a small deployment with few services/nodes, global mode can be used for both settings and consul-alerting will attempt to watch all services and nodes in the catalog. For a large deployment with many services and nodes, both can be set to local mode and consul-alerting can be run on every node, monitoring only the services and checks registered with the local Consul agent.
 
 ### Command Line
 To run the daemon, pass the `-config` flag for the config file location. If a config file is not specified, the default configuration settings will be used and alerts will be logged on the `stdout` handler.
