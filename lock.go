@@ -9,31 +9,51 @@ import (
 
 const lockWaitTime = 15 * time.Second
 
+// LockHelper is a struct to help with acquiring and holding a Consul lock
 type LockHelper struct {
-	target   string
-	path     string
-	client   *api.Client
-	lock     *api.Lock
-	stopCh   chan struct{}
-	lockCh   chan struct{}
+	// The name of the service/node being fought over for the lock
+	target string
+
+	// Consul client object to use for making lock API calls
+	client *api.Client
+
+	// The Lock object to use for acquisition
+	lock *api.Lock
+
+	// A channel used for interrupting the start() loop
+	stopCh chan struct{}
+
+	// A channel used for interrupting the lock acquisition
+	lockCh chan struct{}
+
+	// A function to be run after acquiring the lock
 	callback func()
+
+	// Indicates whether we currently hold the lock
 	acquired bool
 }
 
+// Try to acquire the lock if we don't have it, and then block until we lose it
 func (l *LockHelper) start() {
-	clean := false
-	for !clean {
+	shutdown := false
+	for !shutdown {
 		select {
 		case <-l.stopCh:
-			clean = true
+			shutdown = true
 		default:
 			log.Infof("Waiting to acquire lock on %s...", l.target)
+
+			// Lock() returns an interrupt channel on success that can be used to block until we lose the lock
 			intChan, err := l.lock.Lock(l.lockCh)
+
 			if intChan != nil {
-				log.Infof("Acquired lock for %s", l.target)
+				// Run the callback to update check states before setting acquired to true
 				l.callback()
 				l.acquired = true
+				log.Infof("Acquired lock for %s", l.target)
+
 				<-intChan
+
 				l.acquired = false
 				log.Infof("Lost lock for %s", l.target)
 				l.lock.Unlock()
@@ -48,6 +68,7 @@ func (l *LockHelper) start() {
 	}
 }
 
+// Shut down the lock acquisition loop, which will cause the lock to get released if it's currently acquired
 func (l *LockHelper) stop() {
 	l.stopCh <- struct{}{}
 	l.lockCh <- struct{}{}

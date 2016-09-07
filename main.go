@@ -191,7 +191,7 @@ func registerTestServices(client *api.Client) {
 			case 2:
 				health = "fail"
 			}
-			err := client.Agent().UpdateTTL(name, "example " + health + "ing check output", health)
+			err := client.Agent().UpdateTTL(name, "example "+health+"ing check output", health)
 			if err != nil {
 				log.Error(err)
 			}

@@ -122,7 +122,6 @@ func watch(opts *WatchOptions) {
 
 	lock := LockHelper{
 		target:   name,
-		path:     lockPath,
 		client:   client,
 		lock:     apiLock,
 		stopCh:   make(chan struct{}, 1),
