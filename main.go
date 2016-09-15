@@ -111,16 +111,15 @@ func main() {
 		registerTestServices(client)
 	}
 
-	shutdownOpts := &ShutdownOpts{
-		stopCh: make(chan struct{}, 0),
-	}
+	// Use a shared stop channel between node/service discovery for faster shutdown
+	shutdownCh := make(chan struct{}, 0)
 
-	go discoverServices(nodeName, config, shutdownOpts, client)
+	go discoverServices(nodeName, config, shutdownCh, client)
 
 	// If NodeWatch is set to global mode, monitor the catalog for new nodes
 	if config.NodeWatch == GlobalMode {
 		log.Info("Discovering nodes from catalog")
-		go discoverNodes(config, shutdownOpts, client)
+		go discoverNodes(config, shutdownCh, client)
 	} else {
 		log.Infof("Monitoring local node (%s)'s checks", nodeName)
 		// We're in local mode so we don't need to discover the local node; it won't change
@@ -128,9 +127,8 @@ func main() {
 			node:   nodeName,
 			config: config,
 			client: client,
-			stopCh: shutdownOpts.stopCh,
+			stopCh: shutdownCh,
 		}
-		shutdownOpts.count++
 		go watch(opts)
 	}
 
@@ -142,13 +140,13 @@ func main() {
 	for sig := range c {
 		switch sig {
 		case syscall.SIGINT:
-			shutdown(client, config, shutdownOpts)
+			shutdown(client, config, shutdownCh)
 
 		case syscall.SIGTERM:
-			shutdown(client, config, shutdownOpts)
+			shutdown(client, config, shutdownCh)
 
 		case syscall.SIGQUIT:
-			shutdown(client, config, shutdownOpts)
+			shutdown(client, config, shutdownCh)
 
 		default:
 			log.Error("Unknown signal.")
@@ -156,13 +154,7 @@ func main() {
 	}
 }
 
-// Used to shutdown gracefully by releasing any held locks
-type ShutdownOpts struct {
-	stopCh chan struct{}
-	count  int
-}
-
-func shutdown(client *api.Client, config *Config, opts *ShutdownOpts) {
+func shutdown(client *api.Client, config *Config, shutdownCh chan struct{}) {
 	log.Info("Got interrupt signal, shutting down")
 	if config.DevMode {
 		client.Agent().CheckDeregister("memory usage")
@@ -171,8 +163,10 @@ func shutdown(client *api.Client, config *Config, opts *ShutdownOpts) {
 	}
 
 	log.Info("Releasing locks...")
-	for i := 0; i < opts.count*2; i++ {
-		opts.stopCh <- struct{}{}
+	// Send twice to the channel for each watch to stop; first to initiate shutdown and
+	// then to block until the shutdown has finished
+	for i := 0; i < 4; i++ {
+		shutdownCh <- struct{}{}
 	}
 
 	os.Exit(0)

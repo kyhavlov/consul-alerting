@@ -8,7 +8,7 @@ import (
 )
 
 // Spawns watches for services, adding more when new services are discovered
-func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverServices(nodeName string, config *Config, shutdownCh chan struct{}, client *api.Client) {
 	if config.ServiceWatch == GlobalMode {
 		log.Info("Discovering services from catalog")
 	} else {
@@ -21,10 +21,27 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 	}
 
 	// Used to store services we've already started watches for
-	services := make(map[string][]string)
+	services := make(map[string]bool)
+
+	// Share a stop channel among watches for faster shutdown
+	stopCh := make(chan struct{}, 0)
 
 	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
+		// Check for shutdown event
+		select {
+		case <-shutdownCh:
+			log.Infof("Shutting down service watches (count: %d)...", len(services))
+			for _, _ = range services {
+				stopCh <- struct{}{}
+				stopCh <- struct{}{}
+			}
+			log.Info("Finished shutting down service watches")
+			<-shutdownCh
+			return
+		default:
+		}
+
 		var queryMeta *api.QueryMeta
 		currentServices := make(map[string][]string)
 		var err error
@@ -61,54 +78,31 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 		for service, tags := range currentServices {
 			serviceConfig := config.serviceConfig(service)
 
-			// See if we found a new service
-			if _, ok := services[service]; !ok {
-				log.Infof("Service found: %s, tags: %v", service, tags)
-				services[service] = tags
-
-				// Create a watch for each tag if DistinctTags is set
-				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
-					for _, tag := range tags {
-						if !contains(serviceConfig.IgnoredTags, tag) {
-							watchOpts := &WatchOptions{
-								service: service,
-								tag:     tag,
-								config:  config,
-								client:  client,
-								stopCh:  shutdownOpts.stopCh,
-							}
-							shutdownOpts.count++
-							go watch(watchOpts)
+			// If DistinctTags is specified, spawn a separate watch for each tag on the service
+			if serviceConfig != nil && serviceConfig.DistinctTags {
+				for _, tag := range tags {
+					if _, ok := services[service + ":" + tag]; !ok && !contains(serviceConfig.IgnoredTags, tag) {
+						watchOpts := &WatchOptions{
+							service: service,
+							tag:     tag,
+							config:  config,
+							client:  client,
+							stopCh:  stopCh,
 						}
+						services[service + ":" + tag] = true
+						go watch(watchOpts)
 					}
-				} else {
-					// If it isn't, just start one watch for the service
+				}
+			} else {
+				if _, ok := services[service]; !ok {
 					watchOpts := &WatchOptions{
 						service: service,
 						config:  config,
 						client:  client,
-						stopCh:  shutdownOpts.stopCh,
+						stopCh:  stopCh,
 					}
-					shutdownOpts.count++
+					services[service] = true
 					go watch(watchOpts)
-				}
-			} else {
-				// Check for new, non-ignored tags if DistinctTags is set
-				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
-					services[service] = tags
-
-					for _, tag := range tags {
-						if !contains(serviceConfig.IgnoredTags, tag) && !contains(services[service], tag) {
-							go watch(&WatchOptions{
-								service: service,
-								tag:     tag,
-								config:  config,
-								client:  client,
-								stopCh:  shutdownOpts.stopCh,
-							})
-							shutdownOpts.count++
-						}
-					}
 				}
 			}
 		}
@@ -116,17 +110,33 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 }
 
 // Queries the catalog for nodes and starts watches for them
-func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client) {
 	queryOpts := &api.QueryOptions{
 		AllowStale: true,
 		WaitTime:   watchWaitTime,
 	}
 
 	// Used to store nodes we've already started watches for
-	nodes := make([]string, 0)
+	nodes := make(map[string]bool, 0)
+
+	// Share a stop channel among watches for faster shutdown
+	stopCh := make(chan struct{}, 0)
 
 	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
+		// Check for shutdown event
+		select {
+		case <-shutdownCh:
+			log.Infof("Shutting down node watches (count: %d)...", len(nodes))
+			for _, _ = range nodes {
+				stopCh <- struct{}{}
+				stopCh <- struct{}{}
+			}
+			log.Info("Finished shutting down node watches")
+			<-shutdownCh
+			return
+		default:
+		}
 		currentNodes, queryMeta, err := client.Catalog().Nodes(queryOpts)
 
 		if err != nil {
@@ -142,16 +152,15 @@ func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Clien
 		// spawn any new watches
 		for _, node := range currentNodes {
 			nodeName := node.Node
-			if !contains(nodes, nodeName) {
+			if _, ok := nodes[nodeName]; !ok {
 				log.Infof("Discovered new node: %s", nodeName)
 				opts := &WatchOptions{
 					node:   nodeName,
 					config: config,
 					client: client,
-					stopCh: shutdownOpts.stopCh,
+					stopCh: stopCh,
 				}
-				shutdownOpts.count++
-				nodes = append(nodes, nodeName)
+				nodes[nodeName] = true
 				go watch(opts)
 			}
 		}

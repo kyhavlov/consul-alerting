@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-const watchWaitTime = 15 * time.Second
+const watchWaitTime = 5 * time.Second
 const errorWaitTime = 10 * time.Second
 
 // The settings to use when performing a watch on a service or node
@@ -141,7 +141,7 @@ func watch(opts *WatchOptions) {
 			log.Infof("Shutting down watch for %s", name)
 			lock.stop()
 			<-opts.stopCh
-			break
+			return
 		default:
 		}
 
