@@ -15,14 +15,14 @@ import (
 // AlertHandlers are responsible for alerting to some external endpoint
 // when given an alert (email, pagerduty, etc)
 type AlertHandler interface {
-	Alert(*AlertState)
+	Alert(datacenter string, alert *AlertState)
 }
 
 type StdoutHandler struct {
 	LogLevel string `mapstructure:"log_level"`
 }
 
-func (s StdoutHandler) Alert(alert *AlertState) {
+func (s StdoutHandler) Alert(datacenter string, alert *AlertState) {
 	text := []string{alert.Message}
 	if alert.Details != "" {
 		text = append(text, strings.Split(alert.Details, "\n")...)
@@ -49,7 +49,7 @@ type EmailHandler struct {
 	Recipients []string `mapstructure:"recipients"`
 }
 
-func (e EmailHandler) Alert(alert *AlertState) {
+func (e EmailHandler) Alert(datacenter string, alert *AlertState) {
 	for _, recipient := range e.Recipients {
 		// Get the mail server to use for this recipient
 		records, err := net.LookupMX(strings.Split(recipient, "@")[1])
@@ -78,10 +78,13 @@ type PagerdutyHandler struct {
 	MaxRetries int    `mapstructure:"max_retries"`
 }
 
-func (p PagerdutyHandler) Alert(alert *AlertState) {
+func (p PagerdutyHandler) Alert(datacenter string, alert *AlertState) {
 	client := gopherduty.NewClient(p.ServiceKey)
 	client.MaxRetry = p.MaxRetries
-	incidentKey := alert.Service + "-" + alert.Tag + "-" + alert.Node
+
+	// This key needs to be unique to the datacenter and service/node we're alerting on
+	incidentKey := datacenter + "-" + alert.Service + "-" + alert.Tag + "-" + alert.Node
+
 	if alert.Status != api.HealthPassing {
 		client.Trigger(incidentKey, alert.Message, "", "", alert.Details)
 	} else {
@@ -99,7 +102,7 @@ const slackMessageFormat = `
 %s
 `
 
-func (p SlackHandler) Alert(alert *AlertState) {
+func (p SlackHandler) Alert(datacenter string, alert *AlertState) {
 	api := slack.New(p.Token)
 	err := api.ChatPostMessage(p.ChannelName, fmt.Sprintf(slackMessageFormat, alert.Message, alert.Details), nil)
 

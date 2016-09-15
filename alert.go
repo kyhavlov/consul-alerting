@@ -122,7 +122,7 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	// If no new alerts were triggered during the sleep, send the alert to each handler to be processed
 	if alert.UpdateIndex == updateIndex && update.Status != alert.LastAlerted {
 		for _, handler := range watchOpts.config.serviceHandlers(watchOpts.service) {
-			handler.Alert(alert)
+			handler.Alert(watchOpts.config.ConsulDatacenter, alert)
 		}
 		alert.LastAlerted = update.Status
 		setAlertState(kvPath, alert, watchOpts.client)
@@ -130,7 +130,7 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	watchOpts.alertLock.Unlock()
 }
 
-// Returns each failing check and its output
+// Returns each failing check and its output, used for formatting alert details
 func nodeDetails(checks []*api.HealthCheck) string {
 	details := ""
 
@@ -148,7 +148,7 @@ func nodeDetails(checks []*api.HealthCheck) string {
 	return strings.TrimSpace(details)
 }
 
-// Returns each failing check and its output, grouped by node
+// Returns each failing check and its output, grouped by node, used for formatting alert details
 func serviceDetails(checks []*api.HealthCheck) string {
 	details := ""
 	// Make a map for combining the failing health check outputs on each node
