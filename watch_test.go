@@ -17,7 +17,7 @@ type testHandler struct {
 	alerts chan *AlertState
 }
 
-func (t testHandler) Alert(alert *AlertState) {
+func (t testHandler) Alert(datacenter string, alert *AlertState) {
 	t.alerts <- alert
 }
 

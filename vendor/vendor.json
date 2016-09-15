@@ -45,10 +45,10 @@
 			"revisionTime": "2016-08-18T23:52:15Z"
 		},
 		{
-			"checksumSHA1": "YtS1J4n/0eEK1oKwyBnouGaXT2E=",
+			"checksumSHA1": "BuOGVqQNO+iuqoGKAGGxCxC51ro=",
 			"path": "github.com/hashicorp/consul/testutil",
-			"revision": "36dc9201f2e006d4b5db1f0446b17357811297bf",
-			"revisionTime": "2016-08-18T23:52:15Z"
+			"revision": "a03cd5c3dd29eb60b5a9202a344f41feb5046c46",
+			"revisionTime": "2016-09-15T14:38:02Z"
 		},
 		{
 			"checksumSHA1": "oQBVnohHMtF/4HuDCYKkhy+ijZ4=",

@@ -10,6 +10,8 @@ import (
 
 const testAlertKVPath = "test"
 
+// Set up some test config with a test handler configured. Returns the config and
+// a channel that the handler will send to when alerting
 func testAlertConfig() (*Config, chan *AlertState) {
 	alertCh := make(chan *AlertState, 1)
 
@@ -33,7 +35,12 @@ func TestAlert_setGetAlert(t *testing.T) {
 		Details: "test",
 	}
 
-	setAlertState(testAlertKVPath, expected, client)
+	err := setAlertState(testAlertKVPath, expected, client)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	alert, err := getAlertState(testAlertKVPath, client)
 
 	if err != nil {

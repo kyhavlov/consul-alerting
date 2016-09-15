@@ -50,11 +50,10 @@ func getAlertState(kvPath string, client *api.Client) (*AlertState, error) {
 }
 
 // Sets an alert state in at a given K/V path, returns true if succeeded
-func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
+func setAlertState(kvPath string, alert *AlertState, client *api.Client) error {
 	serialized, err := json.Marshal(alert)
 	if err != nil {
-		log.Errorf("Error forming state for alert in Consul: %s", err)
-		return
+		return fmt.Errorf("Error forming state for alert in Consul: %s", err)
 	}
 
 	_, err = client.KV().Put(&api.KVPair{
@@ -63,9 +62,10 @@ func setAlertState(kvPath string, alert *AlertState, client *api.Client) {
 	}, nil)
 
 	if err != nil {
-		log.Errorf("Error storing state for alert in Consul: %s", err)
-		return
+		return fmt.Errorf("Error storing state for alert in Consul: %s", err)
 	}
+
+	return nil
 }
 
 // Waits for changeThreshold duration, then alerts if LastUpdated has not
@@ -77,6 +77,7 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 
 	if err != nil {
 		log.Error("Error fetching alert state: ", err)
+		watchOpts.alertLock.Unlock()
 		return
 	}
 
@@ -99,7 +100,12 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	updateIndex := alert.UpdateIndex
 
 	// Set LastUpdated on the alert to reset the timer
-	setAlertState(kvPath, alert, watchOpts.client)
+	err = setAlertState(kvPath, alert, watchOpts.client)
+	if err != nil {
+		log.Error("Error setting alert state: ", err)
+		watchOpts.alertLock.Unlock()
+		return
+	}
 	watchOpts.alertLock.Unlock()
 
 	changeThreshold := watchOpts.config.serviceChangeThreshold(watchOpts.service)
@@ -107,6 +113,8 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 	time.Sleep(time.Duration(changeThreshold) * time.Second)
 
 	watchOpts.alertLock.Lock()
+	defer watchOpts.alertLock.Unlock()
+
 	alert, err = getAlertState(kvPath, watchOpts.client)
 
 	if err != nil {
@@ -125,9 +133,12 @@ func tryAlert(kvPath string, update AlertState, watchOpts *WatchOptions) {
 			handler.Alert(watchOpts.config.ConsulDatacenter, alert)
 		}
 		alert.LastAlerted = update.Status
-		setAlertState(kvPath, alert, watchOpts.client)
+
+		err = setAlertState(kvPath, alert, watchOpts.client)
+		if err != nil {
+			log.Error("Error setting alert state: ", err)
+		}
 	}
-	watchOpts.alertLock.Unlock()
 }
 
 // Returns each failing check and its output, used for formatting alert details
