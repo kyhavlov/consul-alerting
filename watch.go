@@ -9,7 +9,10 @@ import (
 	"sync"
 )
 
-const watchWaitTime = 5 * time.Second
+// Maximum time to wait for a blocking (watch) query to Consul
+const watchWaitTime = 10 * time.Second
+
+// Time to wait before retrying after getting an api error from Consul
 const errorWaitTime = 10 * time.Second
 
 // The settings to use when performing a watch on a service or node
@@ -68,6 +71,7 @@ func watch(opts *WatchOptions) {
 		WaitTime:   watchWaitTime,
 	}
 
+	// Initialize the mutex used for locking alert state
 	opts.alertLock = &sync.Mutex{}
 
 	// Figure out whether we're watching a node or service
@@ -138,14 +142,13 @@ func watch(opts *WatchOptions) {
 		// Check for shutdown event
 		select {
 		case <-opts.stopCh:
-			log.Infof("Shutting down watch for %s", name)
 			lock.stop()
 			<-opts.stopCh
 			return
 		default:
 		}
 
-		// Sleep if we don't hold the lock
+		// Sleep and continue until we hold the lock
 		if !lock.acquired {
 			time.Sleep(1 * time.Second)
 			continue

@@ -156,17 +156,17 @@ func main() {
 
 func shutdown(client *api.Client, config *Config, shutdownCh chan struct{}) {
 	log.Info("Got interrupt signal, shutting down")
-	if config.DevMode {
-		client.Agent().CheckDeregister("memory usage")
-		client.Agent().ServiceDeregister("redis")
-		client.Agent().ServiceDeregister("nginx")
-	}
-
 	log.Info("Releasing locks...")
 	// Send twice to the channel for each watch to stop; first to initiate shutdown and
 	// then to block until the shutdown has finished
 	for i := 0; i < 4; i++ {
 		shutdownCh <- struct{}{}
+	}
+
+	if config.DevMode {
+		client.Agent().CheckDeregister("memory usage")
+		client.Agent().ServiceDeregister("redis")
+		client.Agent().ServiceDeregister("nginx")
 	}
 
 	os.Exit(0)

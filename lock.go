@@ -41,7 +41,7 @@ func (l *LockHelper) start() {
 		case <-l.stopCh:
 			shutdown = true
 		default:
-			log.Infof("Waiting to acquire lock on %s...", l.target)
+			log.Debugf("Waiting to acquire lock on %s...", l.target)
 
 			// Lock() returns an interrupt channel on success that can be used to block until we lose the lock
 			intChan, err := l.lock.Lock(l.lockCh)
