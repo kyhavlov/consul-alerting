@@ -10,7 +10,7 @@ branches:
     - master
 
 before_script: |-
-  wget -O consul.zip -q https://releases.hashicorp.com/consul/0.6.4/consul_0.6.4_linux_amd64.zip
+  wget -O consul.zip -q https://releases.hashicorp.com/consul/0.7.0/consul_0.7.0_linux_amd64.zip
   unzip consul.zip
   mkdir -p ~/bin
   mv consul ~/bin/
