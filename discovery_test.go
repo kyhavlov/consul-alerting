@@ -11,8 +11,8 @@ import (
 func testWaitForAlert(t *testing.T, alertCh chan *AlertState, status string, timeout time.Duration) {
 	select {
 	case alert := <-alertCh:
-		if alert.Status != structs.HealthCritical {
-			t.Fatalf("expected alert on status %s, got %s", structs.HealthCritical, alert.Status)
+		if alert.Status != status {
+			t.Fatalf("expected alert on status %s, got %s", status, alert.Status)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("didn't get alert within the timeout")
