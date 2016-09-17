@@ -16,7 +16,7 @@ vet:
 	@go vet
 
 test: fmt vet
-	@go test -v -timeout 300s | grep -ve "http: Request GET /v1/catalog/nodes"
+	@go test -v -timeout 300s
 
 bootstrap:
 	@for tool in  $(EXTERNAL_TOOLS) ; do \

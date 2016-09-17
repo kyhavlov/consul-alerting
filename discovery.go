@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -8,7 +9,7 @@ import (
 )
 
 // Spawns watches for services, adding more when new services are discovered
-func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverServices(nodeName string, config *Config, shutdownCh chan struct{}, client *api.Client) {
 	if config.ServiceWatch == GlobalMode {
 		log.Info("Discovering services from catalog")
 	} else {
@@ -21,10 +22,36 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 	}
 
 	// Used to store services we've already started watches for
-	services := make(map[string][]string)
+	services := make(map[string]bool)
+
+	// Share a stop channel among watches for faster shutdown
+	stopCh := make(map[string]chan struct{})
 
 	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
+		// Check for shutdown event
+		select {
+		case <-shutdownCh:
+			log.Infof("Shutting down service watches (count: %d)...", len(services))
+
+			// Use a wait group to shut down all the watches at the same time
+			var wg sync.WaitGroup
+			for service, _ := range services {
+				wg.Add(1)
+				ch := stopCh[service]
+				go func() {
+					defer wg.Done()
+					ch <- struct{}{}
+					ch <- struct{}{}
+				}()
+			}
+			wg.Wait()
+			log.Info("Finished shutting down service watches")
+			<-shutdownCh
+			return
+		default:
+		}
+
 		var queryMeta *api.QueryMeta
 		currentServices := make(map[string][]string)
 		var err error
@@ -56,77 +83,104 @@ func discoverServices(nodeName string, config *Config, shutdownOpts *ShutdownOpt
 		// Update our WaitIndex for the next query
 		queryOpts.WaitIndex = queryMeta.LastIndex
 
+		// Reset the map so we can detect removed services
+		for service, _ := range services {
+			services[service] = false
+		}
+
 		// Compare the new list of services with our stored one to see if we need to
 		// spawn any new watches
 		for service, tags := range currentServices {
 			serviceConfig := config.serviceConfig(service)
 
-			// See if we found a new service
-			if _, ok := services[service]; !ok {
-				log.Infof("Service found: %s, tags: %v", service, tags)
-				services[service] = tags
-
-				// Create a watch for each tag if DistinctTags is set
-				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
-					for _, tag := range tags {
-						if !contains(serviceConfig.IgnoredTags, tag) {
-							watchOpts := &WatchOptions{
-								service: service,
-								tag:     tag,
-								config:  config,
-								client:  client,
-								stopCh:  shutdownOpts.stopCh,
-							}
-							shutdownOpts.count++
-							go watch(watchOpts)
+			// If DistinctTags is specified, spawn a separate watch for each tag on the service
+			if serviceConfig != nil && serviceConfig.DistinctTags {
+				for _, tag := range tags {
+					if _, ok := services[service+":"+tag]; !ok && !contains(serviceConfig.IgnoredTags, tag) {
+						watchOpts := &WatchOptions{
+							service: service,
+							tag:     tag,
+							config:  config,
+							client:  client,
+							stopCh:  make(chan struct{}, 0),
 						}
+						stopCh[service+":"+tag] = watchOpts.stopCh
+						log.Infof("Discovered new service: %s (tag: %s)", service, tag)
+						go watch(watchOpts)
 					}
-				} else {
-					// If it isn't, just start one watch for the service
+					services[service+":"+tag] = true
+				}
+			} else {
+				if _, ok := services[service]; !ok {
 					watchOpts := &WatchOptions{
 						service: service,
 						config:  config,
 						client:  client,
-						stopCh:  shutdownOpts.stopCh,
+						stopCh:  make(chan struct{}, 0),
 					}
-					shutdownOpts.count++
+					stopCh[service] = watchOpts.stopCh
+					log.Infof("Discovered new service: %s", service)
 					go watch(watchOpts)
 				}
-			} else {
-				// Check for new, non-ignored tags if DistinctTags is set
-				if serviceConfig != nil && len(tags) > 0 && serviceConfig.DistinctTags {
-					services[service] = tags
+				services[service] = true
+			}
+		}
 
-					for _, tag := range tags {
-						if !contains(serviceConfig.IgnoredTags, tag) && !contains(services[service], tag) {
-							go watch(&WatchOptions{
-								service: service,
-								tag:     tag,
-								config:  config,
-								client:  client,
-								stopCh:  shutdownOpts.stopCh,
-							})
-							shutdownOpts.count++
-						}
-					}
-				}
+		// Shut down watched for removed services
+		for service, alive := range services {
+			if !alive {
+				log.Infof("Service %s left, removing", service)
+
+				ch := stopCh[service]
+				delete(services, service)
+				delete(stopCh, service)
+				go func() {
+					ch <- struct{}{}
+					ch <- struct{}{}
+				}()
 			}
 		}
 	}
 }
 
 // Queries the catalog for nodes and starts watches for them
-func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Client) {
+func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client) {
 	queryOpts := &api.QueryOptions{
 		AllowStale: true,
 		WaitTime:   watchWaitTime,
 	}
 
 	// Used to store nodes we've already started watches for
-	nodes := make([]string, 0)
+	nodes := make(map[string]bool, 0)
+
+	// Share a stop channel among watches for faster shutdown
+	stopCh := make(map[string]chan struct{})
 
 	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
+		// Check for shutdown event
+		select {
+		case <-shutdownCh:
+			log.Infof("Shutting down node watches (count: %d)...", len(nodes))
+
+			// Use a wait group to shut down all the watches at the same time
+			var wg sync.WaitGroup
+			for node, _ := range nodes {
+				wg.Add(1)
+				ch := stopCh[node]
+				go func() {
+					defer wg.Done()
+					ch <- struct{}{}
+					ch <- struct{}{}
+				}()
+			}
+			wg.Wait()
+			log.Info("Finished shutting down node watches")
+
+			<-shutdownCh
+			return
+		default:
+		}
 		currentNodes, queryMeta, err := client.Catalog().Nodes(queryOpts)
 
 		if err != nil {
@@ -138,21 +192,41 @@ func discoverNodes(config *Config, shutdownOpts *ShutdownOpts, client *api.Clien
 		// Update our WaitIndex for the next query
 		queryOpts.WaitIndex = queryMeta.LastIndex
 
+		// Reset the map so we can detect removed nodes
+		for node, _ := range nodes {
+			nodes[node] = false
+		}
+
 		// Compare the new list of nodes with our stored one to see if we need to
 		// spawn any new watches
 		for _, node := range currentNodes {
 			nodeName := node.Node
-			if !contains(nodes, nodeName) {
+			if _, ok := nodes[nodeName]; !ok {
 				log.Infof("Discovered new node: %s", nodeName)
 				opts := &WatchOptions{
 					node:   nodeName,
 					config: config,
 					client: client,
-					stopCh: shutdownOpts.stopCh,
+					stopCh: make(chan struct{}, 0),
 				}
-				shutdownOpts.count++
-				nodes = append(nodes, nodeName)
+				stopCh[nodeName] = opts.stopCh
 				go watch(opts)
+			}
+			nodes[nodeName] = true
+		}
+
+		// Shut down watches for removed nodes
+		for node, alive := range nodes {
+			if !alive {
+				log.Infof("Node %s left, removing", node)
+
+				ch := stopCh[node]
+				delete(nodes, node)
+				delete(stopCh, node)
+				go func() {
+					ch <- struct{}{}
+					ch <- struct{}{}
+				}()
 			}
 		}
 	}

@@ -11,8 +11,8 @@ import (
 func testWaitForAlert(t *testing.T, alertCh chan *AlertState, status string, timeout time.Duration) {
 	select {
 	case alert := <-alertCh:
-		if alert.Status != structs.HealthCritical {
-			t.Fatalf("expected alert on status %s, got %s", structs.HealthCritical, alert.Status)
+		if alert.Status != status {
+			t.Fatalf("expected alert on status %s, got %s", status, alert.Status)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("didn't get alert within the timeout")
@@ -32,7 +32,7 @@ func TestDiscovery_existingServiceLocal(t *testing.T) {
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverServices(server.Config.NodeName, config, &ShutdownOpts{}, client)
+	go discoverServices(server.Config.NodeName, config, nil, client)
 
 	<-time.After(1 * time.Second)
 
@@ -52,7 +52,7 @@ func TestDiscovery_discoveredServiceLocal(t *testing.T) {
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverServices(server.Config.NodeName, config, &ShutdownOpts{}, client)
+	go discoverServices(server.Config.NodeName, config, nil, client)
 
 	<-time.After(1 * time.Second)
 
@@ -83,7 +83,7 @@ func TestDiscovery_existingServiceGlobal(t *testing.T) {
 	config.ChangeThreshold = 0
 	config.ServiceWatch = GlobalMode
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverServices(server1.Config.NodeName, config, &ShutdownOpts{}, client)
+	go discoverServices(server1.Config.NodeName, config, nil, client)
 
 	<-time.After(1 * time.Second)
 
@@ -111,12 +111,41 @@ func TestDiscovery_discoveredServiceGlobal(t *testing.T) {
 	config.ChangeThreshold = 0
 	config.ServiceWatch = GlobalMode
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverServices(server1.Config.NodeName, config, &ShutdownOpts{}, client)
+	go discoverServices(server1.Config.NodeName, config, nil, client)
 
 	<-time.After(1 * time.Second)
 
 	// Add a new service with critical health on the remote
 	server2.AddService(testServiceName, structs.HealthCritical, nil)
+
+	testWaitForAlert(t, alertCh, structs.HealthCritical, 5*time.Second)
+}
+
+// Alert on a service that entered, left, and re-entered the catalog
+func TestDiscovery_rediscoverService(t *testing.T) {
+	client, server1 := testConsul(t)
+	defer server1.Stop()
+
+	alertCh := make(chan *AlertState)
+
+	config := DefaultConfig()
+	config.ChangeThreshold = 0
+	config.ServiceWatch = LocalMode
+	config.Handlers["test"] = testHandler{alertCh}
+	go discoverServices(server1.Config.NodeName, config, nil, client)
+
+	<-time.After(1 * time.Second)
+
+	// Add a new service
+	server1.AddService(testServiceName, structs.HealthPassing, nil)
+	<-time.After(1 * time.Second)
+
+	// Remove the service
+	client.Agent().ServiceDeregister(testServiceName)
+	<-time.After(1 * time.Second)
+
+	// Re-add the service
+	server1.AddService(testServiceName, structs.HealthCritical, nil)
 
 	testWaitForAlert(t, alertCh, structs.HealthCritical, 5*time.Second)
 }
@@ -134,7 +163,7 @@ func TestDiscovery_existingNode(t *testing.T) {
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverNodes(config, &ShutdownOpts{}, client)
+	go discoverNodes(config, nil, client)
 
 	<-time.After(1 * time.Second)
 
@@ -151,7 +180,7 @@ func TestDiscovery_discoveredNode(t *testing.T) {
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
 	config.Handlers["test"] = testHandler{alertCh}
-	go discoverNodes(config, &ShutdownOpts{}, client)
+	go discoverNodes(config, nil, client)
 
 	<-time.After(1 * time.Second)
 
