@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/consul/structs"
 	"github.com/hashicorp/consul/testutil"
 	"testing"
@@ -121,7 +122,7 @@ func TestDiscovery_discoveredServiceGlobal(t *testing.T) {
 	testWaitForAlert(t, alertCh, structs.HealthCritical, 5*time.Second)
 }
 
-// Alert on a service that entered, left, and re-entered the catalog
+// Alert on a service that left and was re-added
 func TestDiscovery_rediscoverService(t *testing.T) {
 	client, server1 := testConsul(t)
 	defer server1.Stop()
@@ -148,6 +149,54 @@ func TestDiscovery_rediscoverService(t *testing.T) {
 	server1.AddService(testServiceName, structs.HealthCritical, nil)
 
 	testWaitForAlert(t, alertCh, structs.HealthCritical, 5*time.Second)
+}
+
+// Alert on a node that left and was re-added
+func TestDiscovery_rediscoverNode(t *testing.T) {
+	client, server1 := testConsul(t)
+	defer server1.Stop()
+
+	alertCh := make(chan *AlertState)
+
+	config := DefaultConfig()
+	config.ChangeThreshold = 0
+	config.NodeWatch = GlobalMode
+	config.Handlers["test"] = testHandler{alertCh}
+
+	clientNodeConfig := func(c *testutil.TestServerConfig) {
+		c.NodeName = "server2"
+		c.Bootstrap = false
+		c.Server = false
+	}
+
+	go discoverNodes(config, nil, client)
+
+	<-time.After(1 * time.Second)
+
+	// Add a new node to be discovered
+	server2 := testutil.NewTestServerConfig(t, clientNodeConfig)
+	server2.JoinLAN(server1.LANAddr)
+
+	// Add a new service to the other node and alert on it
+	server2.AddCheck("nodecheck", "", structs.HealthCritical)
+	testWaitForAlert(t, alertCh, structs.HealthCritical, 5*time.Second)
+	<-time.After(1 * time.Second)
+
+	// Remove the node
+	server2.Stop()
+	client.Catalog().Deregister(&api.CatalogDeregistration{
+		Node: "server2",
+	}, &api.WriteOptions{})
+	<-time.After(1 * time.Second)
+
+	// Start the other node again
+	server2 = testutil.NewTestServerConfig(t, clientNodeConfig)
+	defer server2.Stop()
+	server2.JoinLAN(server1.LANAddr)
+
+	// Alert on its health check again
+	server2.AddCheck("nodecheck", "", structs.HealthWarning)
+	testWaitForAlert(t, alertCh, structs.HealthWarning, 5*time.Second)
 }
 
 // Alert on an existing node

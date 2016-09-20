@@ -136,7 +136,7 @@ func watch(opts *WatchOptions) {
 
 	log.Debugf("Initialized watch for %s", name)
 
-	// The main loop for the watch, do blocking queries to monitor the state of this service/node
+	// The main loop for the watch; do blocking queries to monitor the state of this service/node
 	// and read changes in the health status for potential alerts
 	for {
 		// Check for shutdown event
