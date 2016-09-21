@@ -26,8 +26,8 @@ func TestConfig_parseValues(t *testing.T) {
 	consul_token = "test_token"
 	datacenter = "testdc"
 
-	node_watch = "local"
-	service_watch = "global"
+	nodes_watched = "1"
+	service_scope = "global"
 
 	change_threshold = 30
 	default_handlers = ["stdout.warn", "email.admin"]
@@ -72,8 +72,8 @@ func TestConfig_parseValues(t *testing.T) {
 		ConsulAddress:    "localhost:8500",
 		ConsulToken:      "test_token",
 		ConsulDatacenter: "testdc",
-		NodeWatch:        "local",
-		ServiceWatch:     "global",
+		NodesWatched:     "1",
+		ServiceScope:     "global",
 		ChangeThreshold:  30,
 		DefaultHandlers:  []string{"stdout.warn", "email.admin"},
 		LogLevel:         "warn",

@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/mitchellh/mapstructure"
+	"strings"
+	"strconv"
 )
 
 const LocalMode = "local"
@@ -18,14 +20,18 @@ type Config struct {
 	ConsulToken      string   `mapstructure:"consul_token"`
 	ConsulDatacenter string   `mapstructure:"datacenter"`
 	DevMode          bool     `mapstructure:"dev_mode"`
-	NodeWatch        string   `mapstructure:"node_watch"`
-	ServiceWatch     string   `mapstructure:"service_watch"`
+	NodesWatched     string   `mapstructure:"nodes_watched"`
+
+	nodesWatchedCount   int
+	nodesWatchedPercent bool
+
+	ServiceScope     string   `mapstructure:"service_scope"`
 	ChangeThreshold  int      `mapstructure:"change_threshold"`
 	DefaultHandlers  []string `mapstructure:"default_handlers"`
 	LogLevel         string   `mapstructure:"log_level"`
 
-	Services map[string]ServiceConfig
-	Handlers map[string]AlertHandler
+	Services         map[string]ServiceConfig
+	Handlers         map[string]AlertHandler
 }
 
 type ServiceConfig struct {
@@ -87,8 +93,8 @@ func ParseConfig(raw string) (*Config, error) {
 	// Set defaults for unset keys
 	defaultConfig := map[string]interface{}{
 		"consul_address":   "localhost:8500",
-		"node_watch":       "local",
-		"service_watch":    "local",
+		"nodes_watched":    "1",
+		"service_scope":    "local",
 		"change_threshold": 60,
 		"log_level":        "info",
 	}
@@ -124,12 +130,18 @@ func ParseConfig(raw string) (*Config, error) {
 	// Validate config
 	validWatchModes := []string{LocalMode, GlobalMode}
 
-	if !contains(validWatchModes, config.NodeWatch) {
-		return nil, fmt.Errorf("Invalid value for node_watch: %s", config.NodeWatch)
+	maxNodes, err := strconv.Atoi(config.NodesWatched)
+	if err != nil {
+		maxNodes, err = strconv.Atoi(strings.TrimSuffix(config.NodesWatched, "%"))
+		if err != nil {
+			return nil, fmt.Errorf("Invalid value for nodes_watched: %s", config.NodesWatched)
+		}
+		config.nodesWatchedPercent = true
 	}
+	config.nodesWatchedCount = maxNodes
 
-	if !contains(validWatchModes, config.ServiceWatch) {
-		return nil, fmt.Errorf("Invalid value for service_watch: %s", config.ServiceWatch)
+	if !contains(validWatchModes, config.ServiceScope) {
+		return nil, fmt.Errorf("Invalid value for service_scope: %s", config.ServiceScope)
 	}
 
 	return &config, nil

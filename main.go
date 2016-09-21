@@ -117,10 +117,7 @@ func main() {
 	go discoverServices(nodeName, config, shutdownCh, client)
 
 	// If NodeWatch is set to global mode, monitor the catalog for new nodes
-	if config.NodeWatch == GlobalMode {
-		log.Info("Discovering nodes from catalog")
-		go discoverNodes(config, shutdownCh, client)
-	} else {
+	if config.nodesWatchedCount == 1 {
 		log.Infof("Monitoring local node (%s)'s checks", nodeName)
 		// We're in local mode so we don't need to discover the local node; it won't change
 		opts := &WatchOptions{
@@ -130,6 +127,9 @@ func main() {
 			stopCh: shutdownCh,
 		}
 		go watch(opts)
+	} else {
+		log.Infof("Monitoring nodes, limit: %s", config.NodesWatched)
+		go discoverNodes(nodeName, config, shutdownCh, client)
 	}
 
 	// Set up signal handling for graceful shutdown

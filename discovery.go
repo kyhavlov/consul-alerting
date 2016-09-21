@@ -10,7 +10,7 @@ import (
 
 // Spawns watches for services, adding more when new services are discovered
 func discoverServices(nodeName string, config *Config, shutdownCh chan struct{}, client *api.Client) {
-	if config.ServiceWatch == GlobalMode {
+	if config.ServiceScope == GlobalMode {
 		log.Info("Discovering services from catalog")
 	} else {
 		log.Infof("Discovering services on local node (%s)", nodeName)
@@ -57,7 +57,7 @@ func discoverServices(nodeName string, config *Config, shutdownCh chan struct{},
 		var err error
 
 		// Watch either all services or just the local node's, depending on whether GlobalMode is set
-		if config.ServiceWatch == GlobalMode {
+		if config.ServiceScope == GlobalMode {
 			currentServices, queryMeta, err = client.Catalog().Services(queryOpts)
 		} else {
 			var node *api.CatalogNode
@@ -143,18 +143,15 @@ func discoverServices(nodeName string, config *Config, shutdownCh chan struct{},
 	}
 }
 
-// Queries the catalog for nodes and starts watches for them
-func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client) {
-	queryOpts := &api.QueryOptions{
-		AllowStale: true,
-		WaitTime:   watchWaitTime,
-	}
-
+// Queries the local agent for nodes and starts watches for them
+func discoverNodes(nodeName string, config *Config, shutdownCh chan struct{}, client *api.Client) {
 	// Used to store nodes we've already started watches for
 	nodes := make(map[string]bool, 0)
 
 	// Share a stop channel among watches for faster shutdown
 	stopCh := make(map[string]chan struct{})
+
+	index := 0
 
 	// Loop indefinitely to run the watch, doing repeated blocking queries to Consul
 	for {
@@ -181,16 +178,27 @@ func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client)
 			return
 		default:
 		}
-		currentNodes, queryMeta, err := client.Catalog().Nodes(queryOpts)
+
+		// Get the local agent's list of all nodes in the cluster
+		members, err := client.Agent().Members(false)
 
 		if err != nil {
-			log.Errorf("Error trying to watch node list: %s, retrying in 10s...", err)
+			log.Errorf("Error querying node list: %s, retrying in 10s...", err)
 			time.Sleep(errorWaitTime)
 			continue
 		}
 
-		// Update our WaitIndex for the next query
-		queryOpts.WaitIndex = queryMeta.LastIndex
+		// If our node's position in the list changed, find it again
+		if len(members) >= index || members[index].Name != nodeName {
+			for i, m := range members {
+				if m.Name == nodeName {
+					index = i
+					break
+				}
+			}
+		}
+
+		currentNodes := selectWatchedNodes(index, config.nodesWatchedCount,config.nodesWatchedPercent, members)
 
 		// Reset the map so we can detect removed nodes
 		for node, _ := range nodes {
@@ -200,19 +208,18 @@ func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client)
 		// Compare the new list of nodes with our stored one to see if we need to
 		// spawn any new watches
 		for _, node := range currentNodes {
-			nodeName := node.Node
-			if _, ok := nodes[nodeName]; !ok {
-				log.Infof("Discovered new node: %s", nodeName)
+			if _, ok := nodes[node]; !ok {
+				log.Infof("Discovered new node: %s", node)
 				opts := &WatchOptions{
-					node:   nodeName,
+					node:   node,
 					config: config,
 					client: client,
 					stopCh: make(chan struct{}, 0),
 				}
-				stopCh[nodeName] = opts.stopCh
+				stopCh[node] = opts.stopCh
 				go watch(opts)
 			}
-			nodes[nodeName] = true
+			nodes[node] = true
 		}
 
 		// Shut down watches for removed nodes
@@ -229,5 +236,39 @@ func discoverNodes(config *Config, shutdownCh chan struct{}, client *api.Client)
 				}()
 			}
 		}
+
+		time.Sleep(5*time.Second)
 	}
+}
+
+// Pick the next N nodes starting at index to monitor, ignoring those in 'left' state
+func selectWatchedNodes(index int, max int, percentage bool, members []*api.AgentMember) []string {
+	currentNodes := make([]string, 0)
+	currentIndex := index
+	count := 0
+
+	maxNodes := max
+	if percentage {
+		maxNodes = (len(members)*100)/max
+	}
+
+	for count < maxNodes {
+		if currentIndex == len(members) {
+			currentIndex = 0
+		}
+
+		// Ignore nodes in the 'left' (3) state, consul leaves them in the member list for a while
+		if members[currentIndex].Status != 3 {
+			currentNodes = append(currentNodes, members[currentIndex].Name)
+			count++
+		}
+		currentIndex++
+
+		// If we looped through the whole list, exit
+		if currentIndex == index {
+			break
+		}
+	}
+
+	return currentNodes
 }

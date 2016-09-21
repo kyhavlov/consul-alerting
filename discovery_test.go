@@ -82,7 +82,7 @@ func TestDiscovery_existingServiceGlobal(t *testing.T) {
 
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	config.ServiceWatch = GlobalMode
+	config.ServiceScope = GlobalMode
 	config.Handlers["test"] = testHandler{alertCh}
 	go discoverServices(server1.Config.NodeName, config, nil, client)
 
@@ -110,7 +110,7 @@ func TestDiscovery_discoveredServiceGlobal(t *testing.T) {
 
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	config.ServiceWatch = GlobalMode
+	config.ServiceScope = GlobalMode
 	config.Handlers["test"] = testHandler{alertCh}
 	go discoverServices(server1.Config.NodeName, config, nil, client)
 
@@ -131,7 +131,7 @@ func TestDiscovery_rediscoverService(t *testing.T) {
 
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	config.ServiceWatch = LocalMode
+	config.ServiceScope = LocalMode
 	config.Handlers["test"] = testHandler{alertCh}
 	go discoverServices(server1.Config.NodeName, config, nil, client)
 
@@ -160,7 +160,7 @@ func TestDiscovery_rediscoverNode(t *testing.T) {
 
 	config := DefaultConfig()
 	config.ChangeThreshold = 0
-	config.NodeWatch = GlobalMode
+	config.NodesWatched = GlobalMode
 	config.Handlers["test"] = testHandler{alertCh}
 
 	clientNodeConfig := func(c *testutil.TestServerConfig) {
