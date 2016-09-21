@@ -9,16 +9,16 @@
 			"revisionTime": "2016-07-16T02:56:31Z"
 		},
 		{
+			"checksumSHA1": "Lglgc8iIRhqbqd8fpAZKpo/eqeY=",
+			"path": "github.com/Sirupsen/logrus/hooks/test",
+			"revision": "3ec0642a7fb6488f65b06f9040adc67e3990296a",
+			"revisionTime": "2016-08-29T20:23:21Z"
+		},
+		{
 			"checksumSHA1": "gNO0JNpLzYOdInGeq7HqMZUzx9M=",
 			"path": "github.com/armon/go-radix",
 			"revision": "4239b77079c7b5d1243b7b4736304ce8ddb6f0f2",
 			"revisionTime": "2016-01-15T23:47:25Z"
-		},
-		{
-			"checksumSHA1": "48BVK1LS/mw6CydZKLsTLVjeCDM=",
-			"path": "github.com/bluele/slack",
-			"revision": "a04fc519c7bffed19b018e1200ad6f312e093af3",
-			"revisionTime": "2016-08-12T15:11:05Z"
 		},
 		{
 			"checksumSHA1": "fYeLFn6SteybWt1CLv2s3bI2XWc=",
@@ -153,10 +153,22 @@
 			"revisionTime": "2016-08-08T18:12:53Z"
 		},
 		{
+			"checksumSHA1": "akn3XR1kSjvell/LbqYkJMRjZrY=",
+			"path": "github.com/nlopes/slack",
+			"revision": "8b6fdb00c8635e19a736c83310e49951fec6802b",
+			"revisionTime": "2016-09-20T17:39:16Z"
+		},
+		{
 			"checksumSHA1": "78ZklhBVMCDjf6qLiyQp3mTbGXo=",
 			"path": "github.com/x-cray/logrus-prefixed-formatter",
 			"revision": "78e945f7d6bfe5a81ce6121d92d8118e44303e58",
 			"revisionTime": "2016-06-25T16:39:23Z"
+		},
+		{
+			"checksumSHA1": "likOl7O0BJntqagR050kkOBuY4o=",
+			"path": "golang.org/x/net/websocket",
+			"revision": "f4fe4abe3c785295ddf81c7f1823bcd3bad391b6",
+			"revisionTime": "2016-09-20T17:08:14Z"
 		},
 		{
 			"checksumSHA1": "8fD/im5Kwvy3JgmxulDTambmE8w=",

@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 func TestConfig_missingFile(t *testing.T) {
@@ -93,9 +95,11 @@ func TestConfig_parseValues(t *testing.T) {
 		Handlers: map[string]AlertHandler{
 			"stdout.warn": StdoutHandler{
 				LogLevel: "warn",
+				logger:   log.StandardLogger(),
 			},
 			"email.admin": EmailHandler{
 				Recipients: []string{"admin@example.com"},
+				MaxRetries: 5,
 			},
 			"pagerduty.page_ops": PagerdutyHandler{
 				ServiceKey: "asdf1234",
@@ -104,6 +108,7 @@ func TestConfig_parseValues(t *testing.T) {
 			"slack.dev_channel": SlackHandler{
 				Token:       "mytoken",
 				ChannelName: "alerts",
+				MaxRetries:  5,
 			},
 		},
 	}

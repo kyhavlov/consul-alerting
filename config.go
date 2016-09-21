@@ -171,7 +171,13 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 		"stdout": map[string]interface{}{
 			"log_level": "warn",
 		},
+		"email": map[string]interface{}{
+			"max_retries": 5,
+		},
 		"pagerduty": map[string]interface{}{
+			"max_retries": 5,
+		},
+		"slack": map[string]interface{}{
 			"max_retries": 5,
 		},
 	}
@@ -206,6 +212,7 @@ func parseHandlers(list *ast.ObjectList, config *Config) error {
 			if err := mapstructure.WeakDecode(m, &handler); err != nil {
 				return err
 			}
+			handler.logger = log.StandardLogger()
 			config.Handlers[id] = handler
 		case "email":
 			var handler EmailHandler

@@ -100,6 +100,7 @@ The following options can be specified in a service block:
 |       Option       | Description |
 | ------------------ |------------ |
 | `recipients`       | The list of email addresses to use.
+| `max_retries`      | The maximum number of times to retry after a failure when sending an alert email. Defaults to 5.
 
 **pagerduty**
 
@@ -114,6 +115,7 @@ The following options can be specified in a service block:
 | ------------------ |------------ |
 | `api_token`        | The Slack api token to use.
 | `channel_name`     | The Slack channel name to send alerts to.
+| `max_retries`      | The maximum number of times to retry after an api failure when alerting. Defaults to 5.
 
 #### Example log output:
 ```
