@@ -73,9 +73,9 @@ handler "slack" "dev_channel" {
 | `consul_token`     | The [Consul API token][Consul ACLs]. There is no default value.
 | `datacenter`       | The datacenter name to use in alerts. Defaults to the datacenter of the Consul agent.
 | `node_watch`       | The setting to use for discovering nodes. If set to `local`, only the local node's health will be watched. If set to `global`, all nodes in the catalog will be watched. Defaults to `local`.
-| `service_watch`    | The setting to use for discovering services. If set to `local`, only services on the local node will be watch. If set to `global`, all services in the catalog will be watched. Defaults to `local`.
+| `service_watch`    | The setting to use for discovering services. If set to `local`, only services on the local node will be watched. If set to `global`, all services in the catalog will be watched. Defaults to `local`.
 | `change_threshold` | The time (in seconds) that a check must be in a failing state before alerting. Defaults to 60.
-| `default_handlers` | The default list of handlers to send alerts to, in the form `type.name`. Defaults to all handlers.
+| `default_handlers` | The default list of handlers to send alerts to, in the form `type.name`. Defaults to all configured handlers.
 | `log_level`        | The logging level to use. Defaults to `info`.
 
 #### Service Options
