@@ -5,12 +5,13 @@ import (
 	"net"
 	"strings"
 
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/darkcrux/gopherduty"
 	"github.com/hashicorp/consul/api"
 	"github.com/nlopes/slack"
 	"gopkg.in/gomail.v2"
-	"time"
 )
 
 // AlertHandlers are responsible for alerting to some external endpoint
@@ -96,10 +97,15 @@ func (handler PagerdutyHandler) Alert(datacenter string, alert *AlertState) {
 	// This key needs to be unique to the datacenter and service/node we're alerting on
 	incidentKey := datacenter + "-" + alert.Service + "-" + alert.Tag + "-" + alert.Node
 
+	var resp *gopherduty.PagerDutyResponse
 	if alert.Status != api.HealthPassing {
-		client.Trigger(incidentKey, alert.Message, "", "", alert.Details)
+		resp = client.Trigger(incidentKey, alert.Message, "", "", alert.Details)
 	} else {
-		client.Resolve(incidentKey, alert.Message, alert.Details)
+		resp = client.Resolve(incidentKey, alert.Message, alert.Details)
+	}
+
+	for _, err := range resp.Errors {
+		log.Errorf("Error sending alert to PagerDuty: %v (details: %v, message: %v)", err, alert.Details, alert.Message)
 	}
 }
 
