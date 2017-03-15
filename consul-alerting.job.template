@@ -1,0 +1,61 @@
+job "consul-alerting" {
+  region      = "global"
+  datacenters = ["dc1"]
+  type        = "service"
+  priority    = 80
+
+  group "consul-alerting" {
+    task "consul-alerting" {
+      driver = "exec"
+
+      artifact {
+        source = "s3::https://s3.amazonaws.com/[my-artifact-bucket]/consul-alerting.tar.gz"
+      }
+
+      config {
+        command = "/local/consul-alerting"
+        args = [
+          "-config=/local/config.hcl",
+        ]
+      }
+
+      resources {
+        cpu = 500
+        memory = 32
+      }
+
+      template {
+        destination = "local/config.hcl"
+        change_mode = "restart"
+        change_signal = "SIGINT"
+        data = <<EOF
+consul_address = "consul.service.consul:8500"
+datacenter = "dc1"
+
+node_watch = "global"
+service_watch = "global"
+
+change_threshold = 60
+default_handlers = ["stdout.log", "slack.prod_alerts", "pagerduty.on_call"]
+
+log_level = "debug"
+
+handler "stdout" "log" {
+  log_level = "debug"
+}
+
+handler "pagerduty" "on_call" {
+  service_key = "[ my service API key here ]"
+  max_retries = 3
+}
+
+handler "slack" "prod_alerts" {
+  api_token = "[ my slackbot API key here ]"
+  channel_name = "#my-channel"
+  max_retries = 3
+}
+EOF
+      }
+    }
+  }
+}
